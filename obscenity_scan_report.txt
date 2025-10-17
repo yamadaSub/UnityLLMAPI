@@ -1,0 +1,3 @@
+﻿G:\Unity\UnityLLMAPI\Runtime\Chat\JsonSchemaGenerator.cs:320: float cumulative = 0f;
+G:\Unity\UnityLLMAPI\Runtime\Chat\JsonSchemaGenerator.cs:323: cumulative += kvp.Value;
+G:\Unity\UnityLLMAPI\Runtime\Chat\JsonSchemaGenerator.cs:324: if (randomPoint <= cumulative)

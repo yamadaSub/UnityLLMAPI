@@ -92,10 +92,12 @@ public class FunctionSchema<T> : RealTimeJsonSchema<T> where T : SchemaParameter
 public class AIManager : MonoBehaviour
 {
     public static AIManager Instance { get; private set; }
-    [Header("API Keys")]
-    public string OpenAIApiKey;
-    public string GrokApiKey;
-    public string GoogleApiKey;
+
+    // Note: Do NOT serialize API keys. Keys are resolved at runtime from
+    // environment variables or editor-only storage to avoid persisting secrets.
+    public string OpenAIApiKey => ResolveApiKey(new[] { "OPENAI_API_KEY" });
+    public string GrokApiKey   => ResolveApiKey(new[] { "GROK_API_KEY", "XAI_API_KEY" });
+    public string GoogleApiKey => ResolveApiKey(new[] { "GOOGLE_API_KEY" });
 
     private const string openAiEndpoint = "https://api.openai.com/v1/chat/completions";
     private const string grokEndpoint = "https://api.x.ai/v1/chat/completions";
@@ -111,6 +113,40 @@ public class AIManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
     }
 
+    private string ResolveApiKey(string[] envKeys)
+    {
+        // 1) Process/User/Machine environment variables
+        foreach (var key in envKeys)
+        {
+            try
+            {
+                var v = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.Process);
+                if (!string.IsNullOrEmpty(v)) return v;
+                v = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User);
+                if (!string.IsNullOrEmpty(v)) return v;
+                v = Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.Machine);
+                if (!string.IsNullOrEmpty(v)) return v;
+            }
+            catch { /* ignore */ }
+        }
+
+#if UNITY_EDITOR
+        // 2) Editor-only fallback: EditorPrefs (not included in builds, not in Assets)
+        try
+        {
+            foreach (var key in envKeys)
+            {
+                var editorKey = $"UnityLLMAPI.{key}";
+                var value = UnityEditor.EditorPrefs.GetString(editorKey, string.Empty);
+                if (!string.IsNullOrEmpty(value)) return value;
+            }
+        }
+        catch { /* ignore */ }
+#endif
+
+        return string.Empty;
+    }
+
     private (string endpoint, string apiKey) GetEndpointAndApiKey(AIModelType model)
     {
         switch (model)
@@ -122,6 +158,20 @@ public class AIManager : MonoBehaviour
                 return (grokEndpoint, GrokApiKey);
             default:
                 return (openAiEndpoint, OpenAIApiKey);
+        }
+    }
+
+    private string GetRequiredEnvHint(AIModelType model)
+    {
+        switch (model)
+        {
+            case AIModelType.GPT4o:
+                return "Set environment variable OPENAI_API_KEY.";
+            case AIModelType.Grok2:
+            case AIModelType.Grok3:
+                return "Set environment variable GROK_API_KEY (or XAI_API_KEY).";
+            default:
+                return "Set the appropriate API key environment variable.";
         }
     }
 
@@ -149,6 +199,11 @@ public class AIManager : MonoBehaviour
     public async UniTask<string> SendMessageAsync(List<Message> messages, AIModelType model, Dictionary<string, object> initBody=null)
     {
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            Debug.LogError($"API key not configured. {GetRequiredEnvHint(model)}");
+            return null;
+        }
         string modelName = GetModelName(model);
 
         var body = new Dictionary<string, object>
@@ -245,6 +300,11 @@ public class AIManager : MonoBehaviour
     private async UniTask<string> SendStructuredMessageAsyncCore<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
     {
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            Debug.LogError($"API key not configured. {GetRequiredEnvHint(model)}");
+            return null;
+        }
         string modelName = GetModelName(model);
 
         // 型 T から JSON Schema を自動生成
@@ -417,6 +477,11 @@ public class AIManager : MonoBehaviour
             Dictionary<string, object> initBody = null)
     {
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            Debug.LogError($"API key not configured. {GetRequiredEnvHint(model)}");
+            return null;
+        }
         string modelName = GetModelName(model);
 
         var functionList = functions.Select(func => func.GenerateJsonSchema()).ToList();

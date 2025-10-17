@@ -13,11 +13,11 @@ public class ExampleUsage : MonoBehaviour
     {
         List<Message> chatHistory = new List<Message>
         {
-            new Message { role = MessageRole.System, content = "‚±‚ê‚©‚ç‰ï˜b‚ğn‚ß‚Ü‚·B" },
-            new Message { role = MessageRole.User, content = "‚±‚ñ‚É‚¿‚ÍAŒ³‹C‚Å‚·‚©H" }
+            new Message { role = MessageRole.System, content = "ï¿½ï¿½ï¿½ê‚©ï¿½ï¿½ï¿½bï¿½ï¿½ï¿½nï¿½ß‚Ü‚ï¿½ï¿½B" },
+            new Message { role = MessageRole.User, content = "ï¿½ï¿½ï¿½ï¿½É‚ï¿½ï¿½ÍAï¿½ï¿½ï¿½Cï¿½Å‚ï¿½ï¿½ï¿½ï¿½H" }
         };
         var response = await AIManager.Instance.SendMessageAsync(chatHistory, AIModelType.GPT4o);
-        Debug.Log("’Êí‰“š: " + response);
+        Debug.Log("ï¿½Êí‰ï¿½ï¿½: " + response);
     }
 
     [ContextMenu("Send Structured Message")]
@@ -25,25 +25,25 @@ public class ExampleUsage : MonoBehaviour
     {
         List<Message> chatHistory = new List<Message>
         {
-            new Message { role = MessageRole.System, content = "ˆÈ‰º‚Ì¿‹‘î•ñ‚ğ‰ğÍ‚µ‚Ä‚­‚¾‚³‚¢B" },
-            new Message { role = MessageRole.User, content = "¿‹‘”Ô†‚ÍINV1234A“ú•t‚Í2023-03-15A‡Œv‹àŠz‚Í1500.50‚Å‚·BŒÚ‹q‚Í²X–Ø(15)C—é–Ø(24)C“c’†(22)‚Å‚·" }
+            new Message { role = MessageRole.System, content = "ï¿½È‰ï¿½ï¿½Ìï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í‚ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½B" },
+            new Message { role = MessageRole.User, content = "ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ôï¿½ï¿½ï¿½INV1234ï¿½Aï¿½ï¿½ï¿½tï¿½ï¿½2023-03-15ï¿½Aï¿½ï¿½ï¿½vï¿½ï¿½ï¿½zï¿½ï¿½1500.50ï¿½Å‚ï¿½ï¿½Bï¿½Ú‹qï¿½Íï¿½ï¿½Xï¿½ï¿½(15)ï¿½Cï¿½ï¿½ï¿½(24)ï¿½Cï¿½cï¿½ï¿½(22)ï¿½Å‚ï¿½" }
         };
 
         var invoice = await AIManager.Instance.SendStructuredMessageAsync<Invoice>(chatHistory, AIModelType.GPT4o);
         if (invoice != null)
         {
-            Debug.Log("\‘¢‰»‰“š:");
-            Debug.Log("¿‹‘”Ô†: " + invoice.invoiceNumber);
-            Debug.Log("¿‹“ú: " + invoice.date);
-            Debug.Log("¿‹‡Œv‹àŠz: " + invoice.amount);
+            Debug.Log("ï¿½\ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½:");
+            Debug.Log("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ôï¿½: " + invoice.invoiceNumber);
+            Debug.Log("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½: " + invoice.date);
+            Debug.Log("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½vï¿½ï¿½ï¿½z: " + invoice.amount);
             foreach (var customer in invoice.customers)
             {
-                Debug.Log("ŒÚ‹q: " + customer);
+                Debug.Log("ï¿½Ú‹q: " + customer);
             }
         }
         else
         {
-            Debug.Log("\‘¢‰»‰“š‚ªæ“¾‚Å‚«‚Ü‚¹‚ñ‚Å‚µ‚½B");
+            Debug.Log("ï¿½\ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ“¾ï¿½Å‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½Å‚ï¿½ï¿½ï¿½ï¿½B");
         }
     }
 
@@ -52,7 +52,7 @@ public class ExampleUsage : MonoBehaviour
     {
         List<Message> messages = new List<Message>
         {
-            new Message { role = MessageRole.User, content = $"{schema.GenerateMarkDown("Œ»İ‚Ìó‘Ô")}\n{ask}" }
+            new Message { role = MessageRole.User, content = $"{schema.GenerateMarkDown("ï¿½ï¿½ï¿½İ‚Ìï¿½ï¿½")}\n{ask}" }
         };
 
         var structuredResponse = await AIManager.Instance.SendStructuredMessageWithRealTimeSchemaAsync(messages, schema, AIModelType.GPT4o);
@@ -72,8 +72,8 @@ public class ExampleUsage : MonoBehaviour
     {
         List<Message> chatHistory = new List<Message>
         {
-            new Message { role = MessageRole.System, content = "ˆÈ‰º‚ÌŒvZ‚ğÀs‚µ‚Ä‚­‚¾‚³‚¢B" },
-            new Message { role = MessageRole.User, content = "‡Œv6‚É‚È‚éƒpƒ‰ƒ[ƒ^‚ğì‚Á‚Ä‚­‚¾‚³‚¢B" }
+            new Message { role = MessageRole.System, content = "ï¿½È‰ï¿½ï¿½ÌŒvï¿½Zï¿½ï¿½ï¿½ï¿½ï¿½sï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½B" },
+            new Message { role = MessageRole.User, content = "ï¿½ï¿½ï¿½v6ï¿½É‚È‚ï¿½pï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½^ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½B" }
         };
 
         List<IJsonSchema> functions = new List<IJsonSchema>
@@ -84,17 +84,17 @@ public class ExampleUsage : MonoBehaviour
         var result = await AIManager.Instance.SendFunctionCallMessageAsync(chatHistory, functions, AIModelType.GPT4o);
         if (result is AddNumbersFunction func)
         {
-            Debug.Log("Function Calling ‰“š:");
-            Debug.Log("ŠÖ”–¼: " + func.Name);
-            Debug.Log("ˆø”: " + func.GenerateMarkDown());
+            Debug.Log("Function Calling ï¿½ï¿½ï¿½ï¿½:");
+            Debug.Log("ï¿½Öï¿½ï¿½ï¿½: " + func.Name);
+            Debug.Log("ï¿½ï¿½ï¿½ï¿½: " + func.GenerateMarkDown());
         }
         else
         {
-            Debug.Log("Function Calling ‰“š‚ªæ“¾‚Å‚«‚Ü‚¹‚ñ‚Å‚µ‚½B");
+            Debug.Log("Function Calling ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ“¾ï¿½Å‚ï¿½ï¿½Ü‚ï¿½ï¿½ï¿½Å‚ï¿½ï¿½ï¿½ï¿½B");
         }
     }
 
-    #region \‘¢‰»o—Í
+    #region ï¿½\ï¿½ï¿½ï¿½ï¿½ï¿½oï¿½ï¿½
     [Serializable]
     public class Invoice
     {
@@ -115,14 +115,14 @@ public class ExampleUsage : MonoBehaviour
     #region Function Calling
     public class AddNumbersFunction : FunctionSchema<SchemaParameter>
     {
-        public string Description => "2‚Â‚Ì”š‚ğ‰ÁZ‚µ‚Ü‚·B";
+        public string Description => "2ï¿½Â‚Ìï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Zï¿½ï¿½ï¿½Ü‚ï¿½ï¿½B";
 
         public AddNumbersFunction() : base("addNumbers")
         {
             Parameters = new SchemaParameter[]
             {
-                new SchemaParameter { ParameterName = "a", ParameterType = SchemaParameterType.Number, Description = "1‚Â–Ú‚Ì”š", Enum = new string[] { "1.5", "2.5", "3.5" } },
-                new SchemaParameter { ParameterName = "b", ParameterType = SchemaParameterType.Number, Description = "2‚Â–Ú‚Ì”š" }
+                new SchemaParameter { ParameterName = "a", ParameterType = SchemaParameterType.Number, Description = "1ï¿½Â–Ú‚Ìï¿½ï¿½ï¿½", Enum = new string[] { "1.5", "2.5", "3.5" } },
+                new SchemaParameter { ParameterName = "b", ParameterType = SchemaParameterType.Number, Description = "2ï¿½Â–Ú‚Ìï¿½ï¿½ï¿½" }
             };
         }
     }
