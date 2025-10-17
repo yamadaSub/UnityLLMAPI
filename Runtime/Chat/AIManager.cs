@@ -15,8 +15,15 @@ using Cysharp.Threading.Tasks;
 public enum AIModelType
 {
     GPT4o,
+    GPT5,
+    GPT5Mini,
+    GPT5Pro,
     Grok2,
-    Grok3
+    Grok3,
+    Gemini25,
+    Gemini25Pro,
+    Gemini25Flash,
+    Gemini25FlashLite
 }
 
 /// <summary>
@@ -101,6 +108,7 @@ public class AIManager : MonoBehaviour
 
     private const string openAiEndpoint = "https://api.openai.com/v1/chat/completions";
     private const string grokEndpoint = "https://api.x.ai/v1/chat/completions";
+    private const string geminiApiBase = "https://generativelanguage.googleapis.com/v1beta/models";
 
     private void Awake()
     {
@@ -147,15 +155,26 @@ public class AIManager : MonoBehaviour
         return string.Empty;
     }
 
+    private bool IsGeminiModel(AIModelType model)
+        => model == AIModelType.Gemini25 || model == AIModelType.Gemini25Pro || model == AIModelType.Gemini25Flash || model == AIModelType.Gemini25FlashLite;
+
     private (string endpoint, string apiKey) GetEndpointAndApiKey(AIModelType model)
     {
         switch (model)
         {
             case AIModelType.GPT4o:
+            case AIModelType.GPT5:
+            case AIModelType.GPT5Mini:
+            case AIModelType.GPT5Pro:
                 return (openAiEndpoint, OpenAIApiKey);
             case AIModelType.Grok2:
             case AIModelType.Grok3:
                 return (grokEndpoint, GrokApiKey);
+            case AIModelType.Gemini25:
+            case AIModelType.Gemini25Pro:
+            case AIModelType.Gemini25Flash:
+            case AIModelType.Gemini25FlashLite:
+                return (geminiApiBase, GoogleApiKey);
             default:
                 return (openAiEndpoint, OpenAIApiKey);
         }
@@ -170,6 +189,11 @@ public class AIManager : MonoBehaviour
             case AIModelType.Grok2:
             case AIModelType.Grok3:
                 return "Set environment variable GROK_API_KEY (or XAI_API_KEY).";
+            case AIModelType.Gemini25:
+            case AIModelType.Gemini25Pro:
+            case AIModelType.Gemini25Flash:
+            case AIModelType.Gemini25FlashLite:
+                return "Set environment variable GOOGLE_API_KEY.";
             default:
                 return "Set the appropriate API key environment variable.";
         }
@@ -181,10 +205,23 @@ public class AIManager : MonoBehaviour
         {
             case AIModelType.GPT4o:
                 return "gpt-4o";
+            case AIModelType.GPT5:
+                return "gpt-5";
+            case AIModelType.GPT5Mini:
+                return "gpt-5-mini";
+            case AIModelType.GPT5Pro:
+                return "gpt-5-pro";
             case AIModelType.Grok2:
                 return "grok-2-latest";
             case AIModelType.Grok3:
                 return "grok-3-latest";
+            case AIModelType.Gemini25:
+            case AIModelType.Gemini25Pro:
+                return "gemini-2.5-pro";
+            case AIModelType.Gemini25Flash:
+                return "gemini-2.5-flash";
+            case AIModelType.Gemini25FlashLite:
+                return "gemini-2.5-flash-lite";
             default:
                 return "gpt-4o";
         }
@@ -198,6 +235,11 @@ public class AIManager : MonoBehaviour
     /// </summary>
     public async UniTask<string> SendMessageAsync(List<Message> messages, AIModelType model, Dictionary<string, object> initBody=null)
     {
+        if (IsGeminiModel(model))
+        {
+            var modelNameGemini = GetModelName(model);
+            return await SendMessageAsyncGemini(messages, modelNameGemini, initBody);
+        }
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
         if (string.IsNullOrEmpty(apiKey))
         {
@@ -265,6 +307,59 @@ public class AIManager : MonoBehaviour
         }
     }
 
+    private async UniTask<string> SendMessageAsyncGemini(List<Message> messages, string modelName, Dictionary<string, object> initBody)
+    {
+        var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            Debug.LogError($"API key not configured. {GetRequiredEnvHint(AIModelType.Gemini25)}");
+            return null;
+        }
+        var endpoint = $"{geminiApiBase}/{modelName}:generateContent";
+
+        var contents = new List<Dictionary<string, object>>();
+        foreach (var m in messages)
+        {
+            var role = m.role == MessageRole.Assistant ? "model" : "user";
+            var parts = new List<Dictionary<string, string>> { new Dictionary<string, string>{{"text", m.content ?? string.Empty}} };
+            contents.Add(new Dictionary<string, object>{{"role", role }, {"parts", parts}});
+        }
+
+        var body = new Dictionary<string, object>{{"contents", contents}};
+        if (initBody != null)
+        {
+            foreach (var kv in initBody) body[kv.Key] = kv.Value;
+        }
+        var jsonBody = JsonConvert.SerializeObject(body);
+
+        using (var req = new UnityWebRequest(endpoint, "POST"))
+        {
+            req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody));
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            req.SetRequestHeader("x-goog-api-key", apiKey);
+
+            await req.SendWebRequest().ToUniTask();
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"Gemini Error: {req.error} \n{req.downloadHandler?.text}");
+                return null;
+            }
+            try
+            {
+                var text = req.downloadHandler.text;
+                var root = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(text);
+                var first = root?["candidates"]?[0]?["content"]?["parts"]?[0]?["text"]?.ToString();
+                return first ?? string.Empty;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("Gemini JSON parse error: " + ex.Message);
+                return null;
+            }
+        }
+    }
+
     /// <summary>
     /// 会話履歴を送信し、構造化出力モードで型パラメータ T に基づく応答を非同期に取得します。
     /// エラー時は default(T) を返します。
@@ -299,6 +394,11 @@ public class AIManager : MonoBehaviour
     /// </summary>
     private async UniTask<string> SendStructuredMessageAsyncCore<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
     {
+        if (IsGeminiModel(model))
+        {
+            var modelNameGemini = GetModelName(model);
+            return await SendStructuredMessageAsyncCoreGemini<T>(messages, modelNameGemini, initBody);
+        }
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
         if (string.IsNullOrEmpty(apiKey))
         {
@@ -369,6 +469,73 @@ public class AIManager : MonoBehaviour
                 {
                     Debug.LogError("JSON Parsing error: " + ex.Message);
                 }
+                return null;
+            }
+        }
+    }
+
+    private async UniTask<string> SendStructuredMessageAsyncCoreGemini<T>(List<Message> messages, string modelName, Dictionary<string, object> initBody)
+    {
+        var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            Debug.LogError($"API key not configured. {GetRequiredEnvHint(AIModelType.Gemini25)}");
+            return null;
+        }
+        var endpoint = $"{geminiApiBase}/{modelName}:generateContent";
+
+        var contents = new List<Dictionary<string, object>>();
+        foreach (var m in messages)
+        {
+            var role = m.role == MessageRole.Assistant ? "model" : "user";
+            var parts = new List<Dictionary<string, string>> { new Dictionary<string, string>{{"text", m.content ?? string.Empty}} };
+            contents.Add(new Dictionary<string, object>{{"role", role }, {"parts", parts}});
+        }
+
+        var schemaWrap = JsonSchemaGenerator.GenerateSchema<T>();
+        object responseSchema = schemaWrap != null && schemaWrap.ContainsKey("schema") ? schemaWrap["schema"] : null;
+
+        var body = new Dictionary<string, object>
+        {
+            { "contents", contents },
+            { "generationConfig", new Dictionary<string, object>
+                {
+                    { "responseMimeType", "application/json" },
+                    { "responseSchema", responseSchema ?? new Dictionary<string, object>{{"type","object"}} }
+                }
+            }
+        };
+        if (initBody != null)
+        {
+            foreach (var kv in initBody) body[kv.Key] = kv.Value;
+        }
+
+        var jsonBody = JsonConvert.SerializeObject(body);
+        using (var req = new UnityWebRequest(endpoint, "POST"))
+        {
+            req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody));
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            req.SetRequestHeader("x-goog-api-key", apiKey);
+
+            await req.SendWebRequest().ToUniTask();
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"Gemini (structured) Error: {req.error} \n{req.downloadHandler?.text}");
+                return null;
+            }
+            try
+            {
+                var text = req.downloadHandler.text;
+                var root = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(text);
+                var part = root?["candidates"]?[0]?["content"]?["parts"]?[0];
+                var asText = part?["text"]?.ToString();
+                if (!string.IsNullOrEmpty(asText)) return asText;
+                return root?.ToString();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("Gemini (structured) JSON parse error: " + ex.Message);
                 return null;
             }
         }
@@ -476,6 +643,11 @@ public class AIManager : MonoBehaviour
             AIModelType model,
             Dictionary<string, object> initBody = null)
     {
+        if (IsGeminiModel(model))
+        {
+            var modelNameGemini = GetModelName(model);
+            return await SendFunctionCallMessageAsyncGemini(messages, functions, modelNameGemini, initBody);
+        }
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
         if (string.IsNullOrEmpty(apiKey))
         {
@@ -536,6 +708,141 @@ public class AIManager : MonoBehaviour
         return target;
     }
     #endregion
+
+    private async UniTask<IJsonSchema> SendFunctionCallMessageAsyncGemini(
+        List<Message> messages,
+        List<IJsonSchema> functions,
+        string modelName,
+        Dictionary<string, object> initBody)
+    {
+        var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            Debug.LogError($"API key not configured. {GetRequiredEnvHint(AIModelType.Gemini25)}");
+            return null;
+        }
+        var endpoint = $"{geminiApiBase}/{modelName}:generateContent";
+
+        var contents = new List<Dictionary<string, object>>();
+        foreach (var m in messages)
+        {
+            var role = m.role == MessageRole.Assistant ? "model" : "user";
+            var parts = new List<object> { new Dictionary<string, string> { { "text", m.content ?? string.Empty } } };
+            contents.Add(new Dictionary<string, object> { { "role", role }, { "parts", parts } });
+        }
+
+        var functionDeclarations = new List<Dictionary<string, object>>();
+        foreach (var f in functions)
+        {
+            var schema = f.GenerateJsonSchema();
+            var name = schema.ContainsKey("name") ? schema["name"]?.ToString() : f.Name;
+            var description = schema.ContainsKey("description") ? schema["description"]?.ToString() : string.Empty;
+            object parameters = null;
+            if (schema.ContainsKey("parameters")) parameters = schema["parameters"];
+            else if (schema.ContainsKey("schema")) parameters = schema["schema"]; // fallback
+
+            // Gemini 制約に合わせて parameters を調整（非 string 型には enum を付けない）
+            parameters = SanitizeGeminiParameters(parameters);
+
+            functionDeclarations.Add(new Dictionary<string, object>
+            {
+                { "name", name },
+                { "description", description ?? string.Empty },
+                { "parameters", parameters ?? new Dictionary<string, object>{{"type","object"}} }
+            });
+        }
+
+        var body = new Dictionary<string, object>
+        {
+            { "contents", contents },
+            { "tools", new[]{ new Dictionary<string, object> { { "function_declarations", functionDeclarations } } } },
+            { "tool_config", new Dictionary<string, object>{ { "function_calling_config", new Dictionary<string, object>{ { "mode", "AUTO" } } } } }
+        };
+        if (initBody != null)
+            foreach (var kv in initBody) body[kv.Key] = kv.Value;
+
+        var jsonBody = JsonConvert.SerializeObject(body);
+        using (var req = new UnityWebRequest(endpoint, "POST"))
+        {
+            req.uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody));
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            req.SetRequestHeader("x-goog-api-key", apiKey);
+
+            await req.SendWebRequest().ToUniTask();
+            if (req.result != UnityWebRequest.Result.Success)
+            {
+                Debug.LogError($"Gemini (function) Error: {req.error} \n{req.downloadHandler?.text}");
+                return null;
+            }
+
+            try
+            {
+                var text = req.downloadHandler.text;
+                var root = JsonConvert.DeserializeObject<Newtonsoft.Json.Linq.JObject>(text);
+                var parts = root?["candidates"]?[0]?["content"]?["parts"] as Newtonsoft.Json.Linq.JArray;
+                if (parts != null)
+                {
+                    foreach (var p in parts)
+                    {
+                        var fc = p?["functionCall"] as Newtonsoft.Json.Linq.JObject;
+                        if (fc == null) continue;
+                        var fname = fc["name"]?.ToString() ?? string.Empty;
+                        var fargs = fc["args"] as Newtonsoft.Json.Linq.JObject;
+
+                        var target = functions.FirstOrDefault(func => func.Name == fname);
+                        if (target == null) continue;
+
+                        var dict = fargs != null
+                            ? JsonConvert.DeserializeObject<Dictionary<string, object>>(fargs.ToString())
+                            : new Dictionary<string, object>();
+
+                        target.PerseValueDict(dict);
+                        return target;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("Gemini (function) parse error: " + ex.Message);
+            }
+            return null;
+        }
+    }
+
+    // Gemini function_declarations.parameters の仕様に合わせ、
+    // 非 string 型に含まれる enum を除去する簡易サニタイズ。
+    private object SanitizeGeminiParameters(object parameters)
+    {
+        try
+        {
+            if (parameters is Dictionary<string, object> dict)
+            {
+                if (dict.TryGetValue("type", out var tObj) && (tObj?.ToString() ?? "") == "object")
+                {
+                    if (dict.TryGetValue("properties", out var propsObj) && propsObj is Dictionary<string, object> props)
+                    {
+                        foreach (var key in props.Keys.ToList())
+                        {
+                            if (props[key] is Dictionary<string, object> p)
+                            {
+                                var typeStr = p.TryGetValue("type", out var pType) ? pType?.ToString() : null;
+                                if (!string.Equals(typeStr, "string", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    if (p.ContainsKey("enum")) p.Remove("enum");
+                                }
+                                props[key] = p;
+                            }
+                        }
+                        dict["properties"] = props;
+                    }
+                }
+                return dict;
+            }
+        }
+        catch { }
+        return parameters;
+    }
 }
 
 #endregion
