@@ -10,7 +10,7 @@
     "url": "https://github.com/yamadaSub"
   },
   "dependencies": {
-    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask#2.5.10",
+    "com.cysharp.unitask": "2.5.10",
     "com.unity.nuget.newtonsoft-json": "3.2.1"
   },
   "samples": [
