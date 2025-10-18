@@ -96,34 +96,77 @@ public class FunctionSchema<T> : RealTimeJsonSchema<T> where T : SchemaParameter
 /// ・Function Calling（型安全な IFunction リストを渡して自動実行）
 /// を実現します。
 /// </summary>
-public class AIManager : MonoBehaviour
+public static class AIManager
 {
-    public static AIManager Instance { get; private set; }
+    private static AIManagerBehaviour cachedBehaviour;
 
     // Note: Do NOT serialize API keys. Keys are resolved at runtime from
     // environment variables or editor-only storage to avoid persisting secrets.
-    public string OpenAIApiKey => ResolveApiKey(new[] { "OPENAI_API_KEY" });
-    public string GrokApiKey   => ResolveApiKey(new[] { "GROK_API_KEY", "XAI_API_KEY" });
-    public string GoogleApiKey => ResolveApiKey(new[] { "GOOGLE_API_KEY" });
+    public static string OpenAIApiKey => ResolveApiKey(b => b.OpenAIApiKey, new[] { "OPENAI_API_KEY" });
+    public static string GrokApiKey   => ResolveApiKey(b => b.GrokApiKey,   new[] { "GROK_API_KEY", "XAI_API_KEY" });
+    public static string GoogleApiKey => ResolveApiKey(b => b.GoogleApiKey, new[] { "GOOGLE_API_KEY" });
 
     private const string openAiEndpoint = "https://api.openai.com/v1/chat/completions";
     private const string grokEndpoint = "https://api.x.ai/v1/chat/completions";
     private const string geminiApiBase = "https://generativelanguage.googleapis.com/v1beta/models";
 
-    private void Awake()
+    internal static void RegisterBehaviour(AIManagerBehaviour behaviour)
     {
-        if (Instance != null && Instance != this)
-        {
-            Destroy(gameObject);
-            return;
-        }
-        Instance = this;
-        DontDestroyOnLoad(gameObject);
+        if (behaviour == null) return;
+        cachedBehaviour = behaviour;
     }
 
-    private string ResolveApiKey(string[] envKeys)
+    internal static void UnregisterBehaviour(AIManagerBehaviour behaviour)
     {
-        // 1) Process/User/Machine environment variables
+        if (cachedBehaviour == behaviour)
+        {
+            cachedBehaviour = null;
+        }
+    }
+
+    private static AIManagerBehaviour GetBehaviour()
+    {
+        if (cachedBehaviour != null)
+        {
+            return cachedBehaviour;
+        }
+
+#if UNITY_2023_1_OR_NEWER
+        cachedBehaviour = UnityEngine.Object.FindFirstObjectByType<AIManagerBehaviour>();
+#else
+        cachedBehaviour = UnityEngine.Object.FindObjectOfType<AIManagerBehaviour>();
+#endif
+        return cachedBehaviour;
+    }
+
+    private static string ResolveApiKey(Func<AIManagerBehaviour, string> behaviourSelector, string[] envKeys)
+    {
+        var behaviour = GetBehaviour();
+        if (behaviour != null)
+        {
+            var behaviourValue = behaviourSelector?.Invoke(behaviour);
+            if (!string.IsNullOrEmpty(behaviourValue))
+            {
+                return behaviourValue;
+            }
+        }
+
+#if UNITY_EDITOR
+        try
+        {
+            foreach (var key in envKeys)
+            {
+                var editorKey = $"UnityLLMAPI.{key}";
+                var editorValue = UnityEditor.EditorPrefs.GetString(editorKey, string.Empty);
+                if (!string.IsNullOrEmpty(editorValue))
+                {
+                    return editorValue;
+                }
+            }
+        }
+        catch { /* ignore */ }
+#endif
+
         foreach (var key in envKeys)
         {
             try
@@ -138,27 +181,13 @@ public class AIManager : MonoBehaviour
             catch { /* ignore */ }
         }
 
-#if UNITY_EDITOR
-        // 2) Editor-only fallback: EditorPrefs (not included in builds, not in Assets)
-        try
-        {
-            foreach (var key in envKeys)
-            {
-                var editorKey = $"UnityLLMAPI.{key}";
-                var value = UnityEditor.EditorPrefs.GetString(editorKey, string.Empty);
-                if (!string.IsNullOrEmpty(value)) return value;
-            }
-        }
-        catch { /* ignore */ }
-#endif
-
         return string.Empty;
     }
 
-    private bool IsGeminiModel(AIModelType model)
+    private static bool IsGeminiModel(AIModelType model)
         => model == AIModelType.Gemini25 || model == AIModelType.Gemini25Pro || model == AIModelType.Gemini25Flash || model == AIModelType.Gemini25FlashLite;
 
-    private (string endpoint, string apiKey) GetEndpointAndApiKey(AIModelType model)
+    private static (string endpoint, string apiKey) GetEndpointAndApiKey(AIModelType model)
     {
         switch (model)
         {
@@ -180,26 +209,26 @@ public class AIManager : MonoBehaviour
         }
     }
 
-    private string GetRequiredEnvHint(AIModelType model)
+    private static string GetRequiredEnvHint(AIModelType model)
     {
         switch (model)
         {
             case AIModelType.GPT4o:
-                return "Set environment variable OPENAI_API_KEY.";
+                return "Provide an OpenAI API key via AIManagerBehaviour, UnityLLMAPI.OPENAI_API_KEY (EditorPrefs), or the OPENAI_API_KEY environment variable.";
             case AIModelType.Grok2:
             case AIModelType.Grok3:
-                return "Set environment variable GROK_API_KEY (or XAI_API_KEY).";
+                return "Provide a Grok API key via AIManagerBehaviour, UnityLLMAPI.GROK_API_KEY (EditorPrefs), or the GROK_API_KEY/XAI_API_KEY environment variables.";
             case AIModelType.Gemini25:
             case AIModelType.Gemini25Pro:
             case AIModelType.Gemini25Flash:
             case AIModelType.Gemini25FlashLite:
-                return "Set environment variable GOOGLE_API_KEY.";
+                return "Provide a Google API key via AIManagerBehaviour, UnityLLMAPI.GOOGLE_API_KEY (EditorPrefs), or the GOOGLE_API_KEY environment variable.";
             default:
-                return "Set the appropriate API key environment variable.";
+                return "Configure the matching API key on AIManagerBehaviour, in EditorPrefs (UnityLLMAPI.*), or via environment variables.";
         }
     }
 
-    private string GetModelName(AIModelType model)
+    private static string GetModelName(AIModelType model)
     {
         switch (model)
         {
@@ -233,7 +262,7 @@ public class AIManager : MonoBehaviour
     /// 会話履歴（Message のリスト）を送信し、テキスト応答を非同期に取得します。
     /// エラー時は null を返します。
     /// </summary>
-    public async UniTask<string> SendMessageAsync(List<Message> messages, AIModelType model, Dictionary<string, object> initBody=null)
+    public static async UniTask<string> SendMessageAsync(List<Message> messages, AIModelType model, Dictionary<string, object> initBody=null)
     {
         if (IsGeminiModel(model))
         {
@@ -307,7 +336,7 @@ public class AIManager : MonoBehaviour
         }
     }
 
-    private async UniTask<string> SendMessageAsyncGemini(List<Message> messages, string modelName, Dictionary<string, object> initBody)
+    private static async UniTask<string> SendMessageAsyncGemini(List<Message> messages, string modelName, Dictionary<string, object> initBody)
     {
         var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
         if (string.IsNullOrEmpty(apiKey))
@@ -364,7 +393,7 @@ public class AIManager : MonoBehaviour
     /// 会話履歴を送信し、構造化出力モードで型パラメータ T に基づく応答を非同期に取得します。
     /// エラー時は default(T) を返します。
     /// </summary>
-    public async UniTask<T> SendStructuredMessageAsync<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async UniTask<T> SendStructuredMessageAsync<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
     {
         string content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody);
         if (string.IsNullOrEmpty(content))
@@ -375,7 +404,7 @@ public class AIManager : MonoBehaviour
         return structuredResult;
     }
 
-    public async UniTask SendStructuredMessageAsync<T>(T targetInstance, List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async UniTask SendStructuredMessageAsync<T>(T targetInstance, List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
     {
         if (targetInstance == null)
         {
@@ -392,7 +421,7 @@ public class AIManager : MonoBehaviour
     /// <summary>
     /// 会話履歴を送信し、構造化出力モードで型パラメータ T に基づく応答を非同期に取得します。
     /// </summary>
-    private async UniTask<string> SendStructuredMessageAsyncCore<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
+    private static async UniTask<string> SendStructuredMessageAsyncCore<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
     {
         if (IsGeminiModel(model))
         {
@@ -474,7 +503,7 @@ public class AIManager : MonoBehaviour
         }
     }
 
-    private async UniTask<string> SendStructuredMessageAsyncCoreGemini<T>(List<Message> messages, string modelName, Dictionary<string, object> initBody)
+    private static async UniTask<string> SendStructuredMessageAsyncCoreGemini<T>(List<Message> messages, string modelName, Dictionary<string, object> initBody)
     {
         var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
         if (string.IsNullOrEmpty(apiKey))
@@ -546,7 +575,7 @@ public class AIManager : MonoBehaviour
     /// 各パラメータの値を schema.Parameters の Value に設定して返します。
     /// エラー時は null を返します。
     /// </summary>
-    public async UniTask<IJsonSchema> SendStructuredMessageWithRealTimeSchemaAsync(List<Message> messages, IJsonSchema schema, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async UniTask<IJsonSchema> SendStructuredMessageWithRealTimeSchemaAsync(List<Message> messages, IJsonSchema schema, AIModelType model, Dictionary<string, object> initBody = null)
     {
         // RealTimeJsonSchema から JSON Schema を生成
         var jsonSchema = schema.GenerateJsonSchema();
@@ -563,7 +592,7 @@ public class AIManager : MonoBehaviour
     /// <summary>
     /// JsonSchemaを直接介して構造化出力
     /// </summary>
-    public async UniTask<Dictionary<string, object>> SendStructuredMessageWithSchemaAsync(List<Message> messages, Dictionary<string, object> jsonSchema, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async UniTask<Dictionary<string, object>> SendStructuredMessageWithSchemaAsync(List<Message> messages, Dictionary<string, object> jsonSchema, AIModelType model, Dictionary<string, object> initBody = null)
     {
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
         string modelName = GetModelName(model);
@@ -637,7 +666,7 @@ public class AIManager : MonoBehaviour
     /// 会話履歴と IFunction のリストを送信し、Function Calling 対応の応答を非同期に取得します。
     /// エラー時は null を返します。
     /// </summary>
-    public async UniTask<IJsonSchema> SendFunctionCallMessageAsync(
+    public static async UniTask<IJsonSchema> SendFunctionCallMessageAsync(
             List<Message> messages,
             List<IJsonSchema> functions,
             AIModelType model,
@@ -709,7 +738,7 @@ public class AIManager : MonoBehaviour
     }
     #endregion
 
-    private async UniTask<IJsonSchema> SendFunctionCallMessageAsyncGemini(
+    private static async UniTask<IJsonSchema> SendFunctionCallMessageAsyncGemini(
         List<Message> messages,
         List<IJsonSchema> functions,
         string modelName,
@@ -812,7 +841,7 @@ public class AIManager : MonoBehaviour
 
     // Gemini function_declarations.parameters の仕様に合わせ、
     // 非 string 型に含まれる enum を除去する簡易サニタイズ。
-    private object SanitizeGeminiParameters(object parameters)
+    private static object SanitizeGeminiParameters(object parameters)
     {
         try
         {

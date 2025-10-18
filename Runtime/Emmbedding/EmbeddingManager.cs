@@ -5,10 +5,10 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using Cysharp.Threading.Tasks;
 
-#region 共通クラス・Enum
+#region Common Types
 
 /// <summary>
-/// サポートするモデル：GPT と Grok のみ
+/// Supported embedding model flavours.
 /// </summary>
 public enum EmmbeddingModelType
 {
@@ -17,21 +17,22 @@ public enum EmmbeddingModelType
     Gemini01
 }
 #endregion
+
 /// <summary>
-/// OpenAI Embeddings を非同期取得して SerializableEmbedding で返す。
-/// 既存 AIManager と同階層に置き、APIキーは AIManager のものを流用。
+/// Static helper for retrieving embedding vectors from OpenAI or Gemini.
+/// API keys are resolved via <see cref="AIManager"/>.
 /// </summary>
 public static class EmbeddingManager
 {
-    // OpenAI 固有エンドポイント（Embeddings は ChatCompletions と別URL）
+    // Embeddings use a dedicated OpenAI endpoint (different from chat completions).
     private const string openAiEmbeddingsEndpoint = "https://api.openai.com/v1/embeddings";
     private const string geminiEmbeddingsEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent";
 
     /// <summary>
-    /// 指定テキストの埋め込みを取得（OpenAI）。戻り値は軽量シリアライズ型。
+    /// Retrieves an embedding vector for the supplied text.
     /// </summary>
-    /// <param name="text">入力テキスト（単一）</param>
-    /// <param name="openAiModelName">例: "text-embedding-3-small" / "text-embedding-3-large"</param>
+    /// <param name="text">Single text input.</param>
+    /// <param name="model">Embedding backend to use.</param>
     public static async UniTask<SerializableEmbedding> CreateEmbeddingAsync(
         string text,
         EmmbeddingModelType model = EmmbeddingModelType.Gemini01)
@@ -48,14 +49,13 @@ public static class EmbeddingManager
         }
     }
 
+    #region OpenAI Embeddings
 
-
-    #region Emmbeddingモデル実行用(OpenAI)
     /// <summary>
-    /// 指定テキストの埋め込みを取得（OpenAI）。戻り値は軽量シリアライズ型。
+    /// Calls the OpenAI embeddings endpoint for the supplied text and model name.
     /// </summary>
-    /// <param name="text">入力テキスト（単一）</param>
-    /// <param name="openAiModelName">例: "text-embedding-3-small" / "text-embedding-3-large"</param>
+    /// <param name="text">Single text input.</param>
+    /// <param name="modelName">OpenAI embedding model identifier.</param>
     public static async UniTask<SerializableEmbedding> CreateEmbeddingAsyncOpenAI(
         string text,
         string modelName)
@@ -63,12 +63,12 @@ public static class EmbeddingManager
         if (string.IsNullOrEmpty(text))
             throw new ArgumentException("text is null or empty.");
 
-        // APIキーは AIManager の OpenAIApiKey を利用
-        var ai = AIManager.Instance;
-        if (ai == null || string.IsNullOrEmpty(ai.OpenAIApiKey))
-            throw new InvalidOperationException("AIManager.Instance or OpenAIApiKey is not configured.");
+        // AIManager.OpenAIApiKey resolves via AIManagerBehaviour, EditorPrefs, then environment variables.
+        var openAiKey = AIManager.OpenAIApiKey;
+        if (string.IsNullOrEmpty(openAiKey))
+            throw new InvalidOperationException("OpenAIApiKey is not configured on AIManagerBehaviour, EditorPrefs, or environment variables.");
 
-        // OpenAI Embeddings API ボディ
+        // Request body for the OpenAI embeddings API.
         var body = new Dictionary<string, object>
         {
             { "model", modelName},
@@ -83,7 +83,7 @@ public static class EmbeddingManager
             req.uploadHandler = new UploadHandlerRaw(bodyRaw);
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "application/json");
-            req.SetRequestHeader("Authorization", "Bearer " + ai.OpenAIApiKey);
+            req.SetRequestHeader("Authorization", "Bearer " + openAiKey);
 
             await req.SendWebRequest().ToUniTask();
 
@@ -98,7 +98,7 @@ public static class EmbeddingManager
                 var json = req.downloadHandler.text;
                 var dto = JsonConvert.DeserializeObject<OpenAIEmbeddingResponse>(json);
 
-                // 想定: data[0].embedding が float[]
+                // Expected shape: data[0].embedding => float[]
                 var list = dto?.data;
                 if (list == null || list.Count == 0 || list[0].embedding == null)
                 {
@@ -107,7 +107,7 @@ public static class EmbeddingManager
                 }
 
                 var emb = new SerializableEmbedding(modelName);
-                emb.SetFromFloatArray(list[0].embedding); // 量子化して内部格納
+                emb.SetFromFloatArray(list[0].embedding); // Copy raw vector values.
                 return emb;
             }
             catch (Exception ex)
@@ -145,18 +145,18 @@ public static class EmbeddingManager
     #endregion
     #endregion
 
-    #region Emmbeddingモデル実行用(Gemini)
+    #region Gemini Embeddings
 
     private static async UniTask<SerializableEmbedding> CreateGeminiEmbeddingAsync(string text)
     {
         if (string.IsNullOrEmpty(text))
             throw new ArgumentException("text is null or empty.");
 
-        var ai = AIManager.Instance;
-        if (ai == null || string.IsNullOrEmpty(ai.GoogleApiKey))
-            throw new InvalidOperationException("AIManager.GoogleApiKey not configured.");
+        var googleKey = AIManager.GoogleApiKey;
+        if (string.IsNullOrEmpty(googleKey))
+            throw new InvalidOperationException("GoogleApiKey is not configured on AIManagerBehaviour, EditorPrefs, or environment variables.");
 
-        var modelName = "models/gemini-embedding-001"; // 固定
+        const string modelName = "models/gemini-embedding-001";
         var body = new Dictionary<string, object>
         {
             { "model", modelName },
@@ -173,7 +173,7 @@ public static class EmbeddingManager
         };
         req.SetRequestHeader("Content-Type", "application/json");
 
-        req.SetRequestHeader("x-goog-api-key", ai.GoogleApiKey);
+        req.SetRequestHeader("x-goog-api-key", googleKey);
         await req.SendWebRequest().ToUniTask();
 
         if (req.result != UnityWebRequest.Result.Success)
@@ -187,7 +187,11 @@ public static class EmbeddingManager
             var json = req.downloadHandler.text;
             var dto = JsonConvert.DeserializeObject<GeminiEmbeddingResponse>(json);
             var vec = dto?.embedding?.values;
-            if (vec == null) { Debug.LogError("Gemini response missing embedding.values"); return null; }
+            if (vec == null)
+            {
+                Debug.LogError("Gemini response missing embedding.values");
+                return null;
+            }
 
             var emb = new SerializableEmbedding(modelName);
             emb.SetFromFloatArray(vec);
@@ -214,11 +218,11 @@ public static class EmbeddingManager
 
     #endregion
 
-    #region コサイン類似度計算用
+    #region Cosine Similarity Helpers
 
     /// <summary>
-    /// クエリとコーパスのコサイン類似度を一括計算し、(index,score)で降順ソートして返す。
-    /// topK &gt; 0 なら上位K件のみ返す。
+    /// Calculates cosine similarity between a query vector and a corpus.
+    /// Results are sorted by descending similarity.
     /// </summary>
     public static List<SimilarityResult> RankByCosine(
         SerializableEmbedding query,
@@ -232,10 +236,10 @@ public static class EmbeddingManager
             var target = corpus[i];
             if (!string.Equals(query.Model, target.Model))
             {
-                Debug.LogWarning("Emmbeddingで使用したモデルが異なります。正しい類似度比較にならない可能性がある点に注意してください。");
+                Debug.LogWarning("Embedding models differ. Similarity scores may not be comparable.");
             }
 
-            float score = assumeNormalized? query.Dot(target) : query.CosineSimilarity(target);
+            float score = assumeNormalized ? query.Dot(target) : query.CosineSimilarity(target);
             results.Add(new SimilarityResult(i, score));
         }
         results.Sort((a, b) => b.Score.CompareTo(a.Score));

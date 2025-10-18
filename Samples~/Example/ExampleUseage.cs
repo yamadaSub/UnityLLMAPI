@@ -17,7 +17,7 @@ public class ExampleUsage : MonoBehaviour
             new Message { role = MessageRole.System, content = "これから会話を始めます。" },
             new Message { role = MessageRole.User, content = "こんにちは、元気ですか？" }
         };
-        var response = await AIManager.Instance.SendMessageAsync(chatHistory, SelectedModel);
+        var response = await AIManager.SendMessageAsync(chatHistory, SelectedModel);
         Debug.Log("通常応答: " + response);
     }
 
@@ -30,7 +30,7 @@ public class ExampleUsage : MonoBehaviour
             new Message { role = MessageRole.User, content = "請求書番号はINV1234、日付は2023-03-15、合計金額は1500.50です。顧客は佐々木(15)，鈴木(24)，田中(22)です" }
         };
 
-        var invoice = await AIManager.Instance.SendStructuredMessageAsync<Invoice>(chatHistory, SelectedModel);
+        var invoice = await AIManager.SendStructuredMessageAsync<Invoice>(chatHistory, SelectedModel);
         if (invoice != null)
         {
             Debug.Log("構造化応答:");
@@ -56,7 +56,7 @@ public class ExampleUsage : MonoBehaviour
             new Message { role = MessageRole.User, content = $"{Schema.GenerateMarkDown("現在の状態")}\n{ask}" }
         };
 
-        var structuredResponse = await AIManager.Instance.SendStructuredMessageWithRealTimeSchemaAsync(messages, Schema, SelectedModel);
+        var structuredResponse = await AIManager.SendStructuredMessageWithRealTimeSchemaAsync(messages, Schema, SelectedModel);
         if (structuredResponse is RealTimeJsonSchema<SchemaParameter> responce)
         {
             Schema = responce;
@@ -83,7 +83,7 @@ public class ExampleUsage : MonoBehaviour
             new AddNumbersFunction()
         };
 
-        var result = await AIManager.Instance.SendFunctionCallMessageAsync(chatHistory, functions, SelectedModel);
+        var result = await AIManager.SendFunctionCallMessageAsync(chatHistory, functions, SelectedModel);
         if (result is AddNumbersFunction func)
         {
             Debug.Log("Function Calling 応答:");
