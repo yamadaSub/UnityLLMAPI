@@ -5,19 +5,20 @@ using Newtonsoft.Json;
 
 public class ExampleUsage : MonoBehaviour
 {
-    public RealTimeJsonSchema<SchemaParameter> schema;
+    public RealTimeJsonSchema<SchemaParameter> Schema;
     public string ask;
+    public AIModelType SelectedModel = AIModelType.Gemini25Flash; 
 
     [ContextMenu("Send Normal Message")]
     public async void SendNormalMessageExample()
     {
         List<Message> chatHistory = new List<Message>
         {
-            new Message { role = MessageRole.System, content = "���ꂩ���b���n�߂܂��B" },
-            new Message { role = MessageRole.User, content = "����ɂ��́A���C�ł����H" }
+            new Message { role = MessageRole.System, content = "これから会話を始めます。" },
+            new Message { role = MessageRole.User, content = "こんにちは、元気ですか？" }
         };
-        var response = await AIManager.Instance.SendMessageAsync(chatHistory, AIModelType.GPT4o);
-        Debug.Log("�ʏ퉞��: " + response);
+        var response = await AIManager.Instance.SendMessageAsync(chatHistory, SelectedModel);
+        Debug.Log("通常応答: " + response);
     }
 
     [ContextMenu("Send Structured Message")]
@@ -25,25 +26,25 @@ public class ExampleUsage : MonoBehaviour
     {
         List<Message> chatHistory = new List<Message>
         {
-            new Message { role = MessageRole.System, content = "�ȉ��̐�����������͂��Ă��������B" },
-            new Message { role = MessageRole.User, content = "�������ԍ���INV1234�A���t��2023-03-15�A���v���z��1500.50�ł��B�ڋq�͍��X��(15)�C���(24)�C�c��(22)�ł�" }
+            new Message { role = MessageRole.System, content = "以下の請求書情報を解析してください。" },
+            new Message { role = MessageRole.User, content = "請求書番号はINV1234、日付は2023-03-15、合計金額は1500.50です。顧客は佐々木(15)，鈴木(24)，田中(22)です" }
         };
 
-        var invoice = await AIManager.Instance.SendStructuredMessageAsync<Invoice>(chatHistory, AIModelType.GPT4o);
+        var invoice = await AIManager.Instance.SendStructuredMessageAsync<Invoice>(chatHistory, SelectedModel);
         if (invoice != null)
         {
-            Debug.Log("�\��������:");
-            Debug.Log("�������ԍ�: " + invoice.invoiceNumber);
-            Debug.Log("������: " + invoice.date);
-            Debug.Log("�������v���z: " + invoice.amount);
+            Debug.Log("構造化応答:");
+            Debug.Log("請求書番号: " + invoice.invoiceNumber);
+            Debug.Log("請求日: " + invoice.date);
+            Debug.Log("請求合計金額: " + invoice.amount);
             foreach (var customer in invoice.customers)
             {
-                Debug.Log("�ڋq: " + customer);
+                Debug.Log("顧客: " + customer.name);
             }
         }
         else
         {
-            Debug.Log("�\�����������擾�ł��܂���ł����B");
+            Debug.Log("構造化応答が取得できませんでした。");
         }
     }
 
@@ -52,13 +53,13 @@ public class ExampleUsage : MonoBehaviour
     {
         List<Message> messages = new List<Message>
         {
-            new Message { role = MessageRole.User, content = $"{schema.GenerateMarkDown("���݂̏��")}\n{ask}" }
+            new Message { role = MessageRole.User, content = $"{Schema.GenerateMarkDown("現在の状態")}\n{ask}" }
         };
 
-        var structuredResponse = await AIManager.Instance.SendStructuredMessageWithRealTimeSchemaAsync(messages, schema, AIModelType.GPT4o);
+        var structuredResponse = await AIManager.Instance.SendStructuredMessageWithRealTimeSchemaAsync(messages, Schema, SelectedModel);
         if (structuredResponse is RealTimeJsonSchema<SchemaParameter> responce)
         {
-            schema = responce;
+            Schema = responce;
             Debug.Log("Structured Response: " + responce.GenerateMarkDown());
         }
         else
@@ -67,13 +68,14 @@ public class ExampleUsage : MonoBehaviour
         }
     }
 
+
     [ContextMenu("Execute Function Call")]
     public async void ExecuteFunctionCallExample()
     {
         List<Message> chatHistory = new List<Message>
         {
-            new Message { role = MessageRole.System, content = "�ȉ��̌v�Z�����s���Ă��������B" },
-            new Message { role = MessageRole.User, content = "���v6�ɂȂ�p�����[�^������Ă��������B" }
+            new Message { role = MessageRole.System, content = "以下の計算を実行してください。" },
+            new Message { role = MessageRole.User, content = "合計6になるパラメータを作ってください。" }
         };
 
         List<IJsonSchema> functions = new List<IJsonSchema>
@@ -81,20 +83,20 @@ public class ExampleUsage : MonoBehaviour
             new AddNumbersFunction()
         };
 
-        var result = await AIManager.Instance.SendFunctionCallMessageAsync(chatHistory, functions, AIModelType.GPT4o);
+        var result = await AIManager.Instance.SendFunctionCallMessageAsync(chatHistory, functions, SelectedModel);
         if (result is AddNumbersFunction func)
         {
-            Debug.Log("Function Calling ����:");
-            Debug.Log("�֐���: " + func.Name);
-            Debug.Log("����: " + func.GenerateMarkDown());
+            Debug.Log("Function Calling 応答:");
+            Debug.Log("関数名: " + func.Name);
+            Debug.Log("引数: " + func.GenerateMarkDown());
         }
         else
         {
-            Debug.Log("Function Calling �������擾�ł��܂���ł����B");
+            Debug.Log("Function Calling 応答が取得できませんでした。");
         }
     }
 
-    #region �\�����o��
+    #region 構造化出力
     [Serializable]
     public class Invoice
     {
@@ -115,14 +117,14 @@ public class ExampleUsage : MonoBehaviour
     #region Function Calling
     public class AddNumbersFunction : FunctionSchema<SchemaParameter>
     {
-        public string Description => "2�̐��������Z���܂��B";
+        public string Description => "2つの数字を加算します。";
 
         public AddNumbersFunction() : base("addNumbers")
         {
             Parameters = new SchemaParameter[]
             {
-                new SchemaParameter { ParameterName = "a", ParameterType = SchemaParameterType.Number, Description = "1�ڂ̐���", Enum = new string[] { "1.5", "2.5", "3.5" } },
-                new SchemaParameter { ParameterName = "b", ParameterType = SchemaParameterType.Number, Description = "2�ڂ̐���" }
+                new SchemaParameter { ParameterName = "a", ParameterType = SchemaParameterType.Number, Description = "1つ目の数字", Enum = new string[] { "1.5", "2.5", "3.5" } },
+                new SchemaParameter { ParameterName = "b", ParameterType = SchemaParameterType.Number, Description = "2つ目の数字" }
             };
         }
     }

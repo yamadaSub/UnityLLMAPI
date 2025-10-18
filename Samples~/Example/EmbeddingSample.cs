@@ -1,4 +1,4 @@
-// —á: ”CˆÓ‚Ì MonoBehaviour ‚©‚ç
+// ä¾‹: ä»»æ„ã® MonoBehaviour ã‹ã‚‰
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -6,21 +6,21 @@ public class EmbeddingSample : MonoBehaviour
 {
     private async void Start()
     {
-        // king - man + woman à queen
+        // king - man + woman â‰’ queen
         var king = await EmbeddingManager.CreateEmbeddingAsync("king");
         var man = await EmbeddingManager.CreateEmbeddingAsync("man");
         var woman = await EmbeddingManager.CreateEmbeddingAsync("woman");
 
-        // Zp
-        var query = (king - man + woman).Normalized();  // dã‚°‚É³‹K‰»
+        // ç®—è¡“
+        var query = (king - man + woman).Normalized();  // ä»•ä¸Šã’ã«æ­£è¦åŒ–
 
-        Debug.Log($"ƒR[ƒpƒX\’z");
+        Debug.Log($"ã‚³ãƒ¼ãƒ‘ã‚¹æ§‹ç¯‰");
         var corpusWard = new List<string> { "queen", "king", "woman", "man" };
         var corpus = new List<SerializableEmbedding>();
         for (int i = 0; i < corpusWard.Count; i++) corpus.Add(await EmbeddingManager.CreateEmbeddingAsync(corpusWard[i]));
 
-        // Šù‘¶‚Ì EmbeddingSimilarity.RankByCosine ‚ğg‚Á‚ÄãˆÊ‚ğæ“¾
-        Debug.Log($"—Ş—“xŒvZ");
+        // æ—¢å­˜ã® EmbeddingSimilarity.RankByCosine ã‚’ä½¿ã£ã¦ä¸Šä½ã‚’å–å¾—
+        Debug.Log($"é¡ä¼¼åº¦è¨ˆç®—");
         var ranked = EmbeddingManager.RankByCosine(query, corpus, topK: -1);
 
         for (int i = 0; i < ranked.Count; i++)
