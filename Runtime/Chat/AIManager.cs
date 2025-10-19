@@ -1,11 +1,11 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.Networking;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Cysharp.Threading.Tasks; 
+using System.Threading.Tasks; 
 
 #region 共通クラス・Enum
 
@@ -152,19 +152,14 @@ public static class AIManager
         }
 
 #if UNITY_EDITOR
-        try
+        foreach (var key in envKeys)
         {
-            foreach (var key in envKeys)
+            var stored = GetEditorStoredKey(key);
+            if (!string.IsNullOrEmpty(stored))
             {
-                var editorKey = $"UnityLLMAPI.{key}";
-                var editorValue = UnityEditor.EditorPrefs.GetString(editorKey, string.Empty);
-                if (!string.IsNullOrEmpty(editorValue))
-                {
-                    return editorValue;
-                }
+                return stored;
             }
         }
-        catch { /* ignore */ }
 #endif
 
         foreach (var key in envKeys)
@@ -183,6 +178,35 @@ public static class AIManager
 
         return string.Empty;
     }
+
+#if UNITY_EDITOR
+    private static string GetEditorStoredKey(string envKey)
+    {
+        var editorKey = $"UnityLLMAPI.{envKey}";
+        try
+        {
+            var value = UnityEditor.EditorUserSettings.GetConfigValue(editorKey);
+            if (!string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            var legacy = UnityEditor.EditorPrefs.GetString(editorKey, string.Empty);
+            if (!string.IsNullOrEmpty(legacy))
+            {
+                UnityEditor.EditorUserSettings.SetConfigValue(editorKey, legacy);
+                UnityEditor.EditorPrefs.DeleteKey(editorKey);
+                return legacy;
+            }
+        }
+        catch
+        {
+            // ignored
+        }
+
+        return string.Empty;
+    }
+#endif
 
     private static bool IsGeminiModel(AIModelType model)
         => model == AIModelType.Gemini25 || model == AIModelType.Gemini25Pro || model == AIModelType.Gemini25Flash || model == AIModelType.Gemini25FlashLite;
@@ -214,17 +238,17 @@ public static class AIManager
         switch (model)
         {
             case AIModelType.GPT4o:
-                return "Provide an OpenAI API key via AIManagerBehaviour, UnityLLMAPI.OPENAI_API_KEY (EditorPrefs), or the OPENAI_API_KEY environment variable.";
+                return "Provide an OpenAI API key via AIManagerBehaviour, UnityLLMAPI.OPENAI_API_KEY (EditorUserSettings), or the OPENAI_API_KEY environment variable.";
             case AIModelType.Grok2:
             case AIModelType.Grok3:
-                return "Provide a Grok API key via AIManagerBehaviour, UnityLLMAPI.GROK_API_KEY (EditorPrefs), or the GROK_API_KEY/XAI_API_KEY environment variables.";
+                return "Provide a Grok API key via AIManagerBehaviour, UnityLLMAPI.GROK_API_KEY (EditorUserSettings), or the GROK_API_KEY/XAI_API_KEY environment variables.";
             case AIModelType.Gemini25:
             case AIModelType.Gemini25Pro:
             case AIModelType.Gemini25Flash:
             case AIModelType.Gemini25FlashLite:
-                return "Provide a Google API key via AIManagerBehaviour, UnityLLMAPI.GOOGLE_API_KEY (EditorPrefs), or the GOOGLE_API_KEY environment variable.";
+                return "Provide a Google API key via AIManagerBehaviour, UnityLLMAPI.GOOGLE_API_KEY (EditorUserSettings), or the GOOGLE_API_KEY environment variable.";
             default:
-                return "Configure the matching API key on AIManagerBehaviour, in EditorPrefs (UnityLLMAPI.*), or via environment variables.";
+                return "Configure the matching API key on AIManagerBehaviour, in EditorUserSettings (UnityLLMAPI.*), or via environment variables.";
         }
     }
 
@@ -256,13 +280,13 @@ public static class AIManager
         }
     }
 
-    #region UniTask 化した各メソッド
+    #region Task 化した各メソッド
 
     /// <summary>
     /// 会話履歴（Message のリスト）を送信し、テキスト応答を非同期に取得します。
     /// エラー時は null を返します。
     /// </summary>
-    public static async UniTask<string> SendMessageAsync(List<Message> messages, AIModelType model, Dictionary<string, object> initBody=null)
+    public static async Task<string> SendMessageAsync(List<Message> messages, AIModelType model, Dictionary<string, object> initBody=null)
     {
         if (IsGeminiModel(model))
         {
@@ -300,7 +324,7 @@ public static class AIManager
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Authorization", "Bearer " + apiKey);
 
-            await request.SendWebRequest().ToUniTask();
+            await request.SendWebRequestAsync();
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -336,7 +360,7 @@ public static class AIManager
         }
     }
 
-    private static async UniTask<string> SendMessageAsyncGemini(List<Message> messages, string modelName, Dictionary<string, object> initBody)
+    private static async Task<string> SendMessageAsyncGemini(List<Message> messages, string modelName, Dictionary<string, object> initBody)
     {
         var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
         if (string.IsNullOrEmpty(apiKey))
@@ -368,7 +392,7 @@ public static class AIManager
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("x-goog-api-key", apiKey);
 
-            await req.SendWebRequest().ToUniTask();
+            await req.SendWebRequestAsync();
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"Gemini Error: {req.error} \n{req.downloadHandler?.text}");
@@ -393,7 +417,7 @@ public static class AIManager
     /// 会話履歴を送信し、構造化出力モードで型パラメータ T に基づく応答を非同期に取得します。
     /// エラー時は default(T) を返します。
     /// </summary>
-    public static async UniTask<T> SendStructuredMessageAsync<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async Task<T> SendStructuredMessageAsync<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
     {
         string content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody);
         if (string.IsNullOrEmpty(content))
@@ -404,7 +428,7 @@ public static class AIManager
         return structuredResult;
     }
 
-    public static async UniTask SendStructuredMessageAsync<T>(T targetInstance, List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async Task SendStructuredMessageAsync<T>(T targetInstance, List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
     {
         if (targetInstance == null)
         {
@@ -421,7 +445,7 @@ public static class AIManager
     /// <summary>
     /// 会話履歴を送信し、構造化出力モードで型パラメータ T に基づく応答を非同期に取得します。
     /// </summary>
-    private static async UniTask<string> SendStructuredMessageAsyncCore<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
+    private static async Task<string> SendStructuredMessageAsyncCore<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
     {
         if (IsGeminiModel(model))
         {
@@ -467,7 +491,7 @@ public static class AIManager
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Authorization", "Bearer " + apiKey);
 
-            await request.SendWebRequest().ToUniTask();
+            await request.SendWebRequestAsync();
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -503,7 +527,7 @@ public static class AIManager
         }
     }
 
-    private static async UniTask<string> SendStructuredMessageAsyncCoreGemini<T>(List<Message> messages, string modelName, Dictionary<string, object> initBody)
+    private static async Task<string> SendStructuredMessageAsyncCoreGemini<T>(List<Message> messages, string modelName, Dictionary<string, object> initBody)
     {
         var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
         if (string.IsNullOrEmpty(apiKey))
@@ -547,7 +571,7 @@ public static class AIManager
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("x-goog-api-key", apiKey);
 
-            await req.SendWebRequest().ToUniTask();
+            await req.SendWebRequestAsync();
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"Gemini (structured) Error: {req.error} \n{req.downloadHandler?.text}");
@@ -575,7 +599,7 @@ public static class AIManager
     /// 各パラメータの値を schema.Parameters の Value に設定して返します。
     /// エラー時は null を返します。
     /// </summary>
-    public static async UniTask<IJsonSchema> SendStructuredMessageWithRealTimeSchemaAsync(List<Message> messages, IJsonSchema schema, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async Task<IJsonSchema> SendStructuredMessageWithRealTimeSchemaAsync(List<Message> messages, IJsonSchema schema, AIModelType model, Dictionary<string, object> initBody = null)
     {
         // RealTimeJsonSchema から JSON Schema を生成
         var jsonSchema = schema.GenerateJsonSchema();
@@ -592,7 +616,7 @@ public static class AIManager
     /// <summary>
     /// JsonSchemaを直接介して構造化出力
     /// </summary>
-    public static async UniTask<Dictionary<string, object>> SendStructuredMessageWithSchemaAsync(List<Message> messages, Dictionary<string, object> jsonSchema, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async Task<Dictionary<string, object>> SendStructuredMessageWithSchemaAsync(List<Message> messages, Dictionary<string, object> jsonSchema, AIModelType model, Dictionary<string, object> initBody = null)
     {
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
         string modelName = GetModelName(model);
@@ -625,7 +649,7 @@ public static class AIManager
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Authorization", "Bearer " + apiKey);
 
-            await request.SendWebRequest().ToUniTask();
+            await request.SendWebRequestAsync();
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -666,7 +690,7 @@ public static class AIManager
     /// 会話履歴と IFunction のリストを送信し、Function Calling 対応の応答を非同期に取得します。
     /// エラー時は null を返します。
     /// </summary>
-    public static async UniTask<IJsonSchema> SendFunctionCallMessageAsync(
+    public static async Task<IJsonSchema> SendFunctionCallMessageAsync(
             List<Message> messages,
             List<IJsonSchema> functions,
             AIModelType model,
@@ -707,7 +731,7 @@ public static class AIManager
         request.SetRequestHeader("Content-Type", "application/json");
         request.SetRequestHeader("Authorization", "Bearer " + apiKey);
 
-        await request.SendWebRequest().ToUniTask();
+        await request.SendWebRequestAsync();
 
         if (request.result != UnityWebRequest.Result.Success)
         {
@@ -738,7 +762,7 @@ public static class AIManager
     }
     #endregion
 
-    private static async UniTask<IJsonSchema> SendFunctionCallMessageAsyncGemini(
+    private static async Task<IJsonSchema> SendFunctionCallMessageAsyncGemini(
         List<Message> messages,
         List<IJsonSchema> functions,
         string modelName,
@@ -798,7 +822,7 @@ public static class AIManager
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("x-goog-api-key", apiKey);
 
-            await req.SendWebRequest().ToUniTask();
+            await req.SendWebRequestAsync();
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"Gemini (function) Error: {req.error} \n{req.downloadHandler?.text}");
@@ -875,3 +899,4 @@ public static class AIManager
 }
 
 #endregion
+

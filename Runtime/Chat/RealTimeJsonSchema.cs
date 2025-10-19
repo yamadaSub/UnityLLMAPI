@@ -1,5 +1,4 @@
-using Cysharp.Threading.Tasks;
-using Newtonsoft.Json;
+ï»¿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,22 +10,22 @@ using UnityEngine;
 
 
 /// <summary>
-/// Šeƒpƒ‰ƒ[ƒ^‚Ì’è‹`‚¨‚æ‚Ñ’l‚ğ•Û‚·‚éƒNƒ‰ƒX‚Å‚·B
-/// ’l‚Í‚·‚×‚Ä•¶š—ñ‚Å•Û‚µAGetValue() ‚Å ParameterType ‚É‰‚¶‚½Œ^‚É•ÏŠ·‚µ‚Ü‚·B
+/// å„ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã®å®šç¾©ãŠã‚ˆã³å€¤ã‚’ä¿æŒã™ã‚‹ã‚¯ãƒ©ã‚¹ã§ã™ã€‚
+/// å€¤ã¯ã™ã¹ã¦æ–‡å­—åˆ—ã§ä¿æŒã—ã€GetValue() ã§ ParameterType ã«å¿œã˜ãŸå‹ã«å¤‰æ›ã—ã¾ã™ã€‚
 /// </summary>
 [Serializable]
 public class SchemaParameter
 {
-    [Tooltip("ƒpƒ‰ƒ[ƒ^–¼i•K{j")]
+    [Tooltip("ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿åï¼ˆå¿…é ˆï¼‰")]
     public string ParameterName;
 
-    [Tooltip("ƒpƒ‰ƒ[ƒ^‚Ìà–¾")]
+    [Tooltip("ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã®èª¬æ˜")]
     public string Description;
 
-    [Tooltip("ƒpƒ‰ƒ[ƒ^‚ÌŒ^")]
+    [Tooltip("ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã®å‹")]
     public SchemaParameterType ParameterType;
 
-    [Tooltip("ƒpƒ‰ƒ[ƒ^‚Ì’li‚·‚×‚Ä•¶š—ñ‚Æ‚µ‚Ä“ü—Í‚µ‚Ä‚­‚¾‚³‚¢j")]
+    [Tooltip("ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã®å€¤ï¼ˆã™ã¹ã¦æ–‡å­—åˆ—ã¨ã—ã¦å…¥åŠ›ã—ã¦ãã ã•ã„ï¼‰")]
     [FlexibleInput("ParameterType")]
     public string Value;
 
@@ -34,8 +33,8 @@ public class SchemaParameter
     public string[] Enum;
 
     /// <summary>
-    /// ParameterType ‚É‡‚í‚¹‚½Œ^‚É•ÏŠ·‚µ‚½’l‚ğ•Ô‚µ‚Ü‚·B
-    /// •ÏŠ·‚É¸”s‚µ‚½ê‡‚ÍANumber ‚Í 0ABoolean ‚Í falseADateTime ‚Í null ‚ğ•Ô‚µ‚Ü‚·B
+    /// ParameterType ã«åˆã‚ã›ãŸå‹ã«å¤‰æ›ã—ãŸå€¤ã‚’è¿”ã—ã¾ã™ã€‚
+    /// å¤‰æ›ã«å¤±æ•—ã—ãŸå ´åˆã¯ã€Number ã¯ 0ã€Boolean ã¯ falseã€DateTime ã¯ null ã‚’è¿”ã—ã¾ã™ã€‚
     /// </summary>
     public object GetValue()
     {
@@ -53,7 +52,7 @@ public class SchemaParameter
                 return false;
             case SchemaParameterType.DateTime:
                 if (DateTime.TryParse(Value, out DateTime dt))
-                    return dt.ToString("o"); // ISO 8601 Œ`®
+                    return dt.ToString("o"); // ISO 8601 å½¢å¼
                 return null;
             case SchemaParameterType.None:
                 return null;
@@ -95,16 +94,16 @@ public interface IJsonSchema:ICloneable
 }
 
 /// <summary>
-/// ƒXƒL[ƒ}–¼‚Æ•¡”‚Ìƒpƒ‰ƒ[ƒ^’è‹`‚ğ•Û‚µA
-/// ‚»‚±‚©‚ç JSON SchemaA’lƒIƒuƒWƒFƒNƒgA‚»‚µ‚Äƒ}[ƒNƒ_ƒEƒ“Œ`®‚Ìà–¾‚ğ©“®¶¬‚·‚éƒNƒ‰ƒX‚Å‚·B
+/// ã‚¹ã‚­ãƒ¼ãƒåã¨è¤‡æ•°ã®ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿å®šç¾©ã‚’ä¿æŒã—ã€
+/// ãã“ã‹ã‚‰ JSON Schemaã€å€¤ã‚ªãƒ–ã‚¸ã‚§ã‚¯ãƒˆã€ãã—ã¦ãƒãƒ¼ã‚¯ãƒ€ã‚¦ãƒ³å½¢å¼ã®èª¬æ˜ã‚’è‡ªå‹•ç”Ÿæˆã™ã‚‹ã‚¯ãƒ©ã‚¹ã§ã™ã€‚
 /// </summary>
 [Serializable]
 public class RealTimeJsonSchema<T> :IJsonSchema where T : SchemaParameter
 {
-    [Tooltip("ƒXƒL[ƒ}–¼")]
+    [Tooltip("ã‚¹ã‚­ãƒ¼ãƒå")]
     public string Name { get; }
 
-    [Tooltip("ƒpƒ‰ƒ[ƒ^’è‹`‚Ì”z—ñ")]
+    [Tooltip("ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿å®šç¾©ã®é…åˆ—")]
     public T[] Parameters = new T[0];
 
     public RealTimeJsonSchema(string name)
@@ -126,14 +125,14 @@ public class RealTimeJsonSchema<T> :IJsonSchema where T : SchemaParameter
     }
 
     /// <summary>
-    /// ˆø”ƒiƒV”Å
+    /// å¼•æ•°ãƒŠã‚·ç‰ˆ
     /// </summary>
     /// <returns></returns>
     public Dictionary<string, object> GenerateJsonSchema() => GenerateJsonSchema(null);
 
     /// <summary>
-    /// Œ»İİ’è‚³‚ê‚Ä‚¢‚éŠeƒpƒ‰ƒ[ƒ^‚Ì’l‚ğAƒpƒ‰ƒ[ƒ^–¼‚ğƒL[‚Æ‚µ‚½ Dictionary ‚Æ‚µ‚Ä•Ô‚µ‚Ü‚·B
-    /// API ‚Ö‚Ì’l“n‚µ‚È‚Ç‚É—˜—p‚Å‚«‚Ü‚·B
+    /// ç¾åœ¨è¨­å®šã•ã‚Œã¦ã„ã‚‹å„ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã®å€¤ã‚’ã€ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿åã‚’ã‚­ãƒ¼ã¨ã—ãŸ Dictionary ã¨ã—ã¦è¿”ã—ã¾ã™ã€‚
+    /// API ã¸ã®å€¤æ¸¡ã—ãªã©ã«åˆ©ç”¨ã§ãã¾ã™ã€‚
     /// </summary>
     public Dictionary<string, object> GenerateValuesObject(Func<T, bool> filter = null)
     {
@@ -151,12 +150,12 @@ public class RealTimeJsonSchema<T> :IJsonSchema where T : SchemaParameter
     }
 
     /// <summary>
-    /// Šeƒpƒ‰ƒ[ƒ^‚Ìà–¾‚ğƒ}[ƒNƒ_ƒEƒ“Œ`®‚Å¶¬‚µ‚Ü‚·B
-    /// ƒwƒbƒ_ƒŒƒxƒ‹i”šj‚ğw’è‚Å‚«ASchemaName ‚ğŒ©o‚µ‚Æ‚µ‚Äg—p‚µ‚Ü‚·B
-    /// —áiheaderLevel=2 ‚Ìê‡j:
-    /// ## ¿‹‘”Ô†
+    /// å„ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã®èª¬æ˜ã‚’ãƒãƒ¼ã‚¯ãƒ€ã‚¦ãƒ³å½¢å¼ã§ç”Ÿæˆã—ã¾ã™ã€‚
+    /// ãƒ˜ãƒƒãƒ€ãƒ¬ãƒ™ãƒ«ï¼ˆæ•°å­—ï¼‰ã‚’æŒ‡å®šã§ãã€SchemaName ã‚’è¦‹å‡ºã—ã¨ã—ã¦ä½¿ç”¨ã—ã¾ã™ã€‚
+    /// ä¾‹ï¼ˆheaderLevel=2 ã®å ´åˆï¼‰:
+    /// ## è«‹æ±‚æ›¸ç•ªå·
     /// * invoiceNumber : INV1234 
-    ///   * ¿‹‘”Ô†
+    ///   * è«‹æ±‚æ›¸ç•ªå·
     /// </summary>
     public virtual string GenerateMarkDown(string header = null, int headerLevel = 2, Func<T, bool> filter = null)
     {
@@ -181,7 +180,7 @@ public class RealTimeJsonSchema<T> :IJsonSchema where T : SchemaParameter
     }
 
     /// <summary>
-    /// schema ‚É’è‹`‚³‚ê‚½Šeƒpƒ‰ƒ[ƒ^‚Ì–¼‘O‚É‘Î‰‚·‚é’l‚ğ Value ‚Éİ’è
+    /// schema ã«å®šç¾©ã•ã‚ŒãŸå„ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ã®åå‰ã«å¯¾å¿œã™ã‚‹å€¤ã‚’ Value ã«è¨­å®š
     /// </summary>
     public virtual void PerseValueDict(Dictionary<string, object> valuesDict)
     {

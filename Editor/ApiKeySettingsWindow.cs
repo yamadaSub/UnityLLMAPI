@@ -1,4 +1,4 @@
-// Editor-only window to configure API keys via UnityEditor.EditorPrefs.
+﻿// Editor-only window to configure API keys via project-scoped EditorUserSettings.
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEngine;
@@ -27,26 +27,59 @@ namespace UnityLLMAPI.Editor
 
         private void OnEnable()
         {
-            openAI = EditorPrefs.GetString(PrefOpenAI, string.Empty);
-            grok   = EditorPrefs.GetString(PrefGrok, string.Empty);
-            google = EditorPrefs.GetString(PrefGoogle, string.Empty);
+            openAI = LoadKey(PrefOpenAI);
+            grok   = LoadKey(PrefGrok);
+            google = LoadKey(PrefGoogle);
         }
 
         private void Save()
         {
-            EditorPrefs.SetString(PrefOpenAI, openAI ?? string.Empty);
-            EditorPrefs.SetString(PrefGrok,   grok   ?? string.Empty);
-            EditorPrefs.SetString(PrefGoogle, google ?? string.Empty);
-            ShowNotification(new GUIContent("Saved EditorPrefs keys."));
+            SaveKey(PrefOpenAI, openAI);
+            SaveKey(PrefGrok,   grok);
+            SaveKey(PrefGoogle, google);
+            ShowNotification(new GUIContent("Saved project keys."));
         }
 
         private void ClearAll()
         {
-            EditorPrefs.DeleteKey(PrefOpenAI);
-            EditorPrefs.DeleteKey(PrefGrok);
-            EditorPrefs.DeleteKey(PrefGoogle);
+            SaveKey(PrefOpenAI, null);
+            SaveKey(PrefGrok,   null);
+            SaveKey(PrefGoogle, null);
             openAI = grok = google = string.Empty;
-            ShowNotification(new GUIContent("Cleared EditorPrefs keys."));
+            ShowNotification(new GUIContent("Cleared stored keys."));
+        }
+
+        private static string LoadKey(string key)
+        {
+            var value = EditorUserSettings.GetConfigValue(key);
+            if (!string.IsNullOrEmpty(value))
+            {
+                return value;
+            }
+
+            var legacy = EditorPrefs.GetString(key, string.Empty);
+            if (!string.IsNullOrEmpty(legacy))
+            {
+                EditorUserSettings.SetConfigValue(key, legacy);
+                EditorPrefs.DeleteKey(key);
+                return legacy;
+            }
+
+            return string.Empty;
+        }
+
+        private static void SaveKey(string key, string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                EditorUserSettings.SetConfigValue(key, null);
+            }
+            else
+            {
+                EditorUserSettings.SetConfigValue(key, value);
+            }
+
+            EditorPrefs.DeleteKey(key);
         }
 
         private static string ReadEnv(string key)
@@ -73,7 +106,7 @@ namespace UnityLLMAPI.Editor
         private void OnGUI()
         {
             EditorGUILayout.HelpBox(
-                "Keys are NOT saved in assets. Runtime resolves in order: Environment Variables -> EditorPrefs.",
+                "Keys are NOT saved in assets. Runtime resolves in order: Environment Variables -> EditorUserSettings (per project).",
                 MessageType.Info);
 
             using (new EditorGUILayout.HorizontalScope())
@@ -103,7 +136,7 @@ namespace UnityLLMAPI.Editor
             GUILayout.FlexibleSpace();
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Save (EditorPrefs)", GUILayout.Height(26))) Save();
+                if (GUILayout.Button("Save (Project)", GUILayout.Height(26))) Save();
                 if (GUILayout.Button("Clear", GUILayout.Height(26))) ClearAll();
             }
         }
@@ -122,12 +155,12 @@ namespace UnityLLMAPI.Editor
                     EditorGUILayout.LabelField($"Env {env}", string.IsNullOrEmpty(envVal) ? "(not set)" : Mask(envVal));
                 }
 
-                var prefVal = EditorPrefs.GetString(prefKey, string.Empty);
-                EditorGUILayout.LabelField("EditorPrefs", string.IsNullOrEmpty(prefVal) ? "(not set)" : Mask(prefVal));
+                var projectVal = LoadKey(prefKey);
+                EditorGUILayout.LabelField("EditorUserSettings", string.IsNullOrEmpty(projectVal) ? "(not set)" : Mask(projectVal));
             }
 
-            // Input field (EditorPrefs value)
-            var label = $"EditorPrefs {prefKey}";
+            // Input field (project-scoped value)
+            var label = $"Project Key ({prefKey})";
             if (showValues)
             {
                 refValue = EditorGUILayout.TextField(label, refValue);
@@ -140,3 +173,4 @@ namespace UnityLLMAPI.Editor
     }
 }
 #endif
+

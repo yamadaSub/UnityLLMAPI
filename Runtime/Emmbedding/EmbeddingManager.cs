@@ -3,7 +3,7 @@ using UnityEngine.Networking;
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
-using Cysharp.Threading.Tasks;
+using System.Threading.Tasks;
 
 #region Common Types
 
@@ -33,7 +33,7 @@ public static class EmbeddingManager
     /// </summary>
     /// <param name="text">Single text input.</param>
     /// <param name="model">Embedding backend to use.</param>
-    public static async UniTask<SerializableEmbedding> CreateEmbeddingAsync(
+    public static async Task<SerializableEmbedding> CreateEmbeddingAsync(
         string text,
         EmmbeddingModelType model = EmmbeddingModelType.Gemini01)
     {
@@ -56,17 +56,17 @@ public static class EmbeddingManager
     /// </summary>
     /// <param name="text">Single text input.</param>
     /// <param name="modelName">OpenAI embedding model identifier.</param>
-    public static async UniTask<SerializableEmbedding> CreateEmbeddingAsyncOpenAI(
+    public static async Task<SerializableEmbedding> CreateEmbeddingAsyncOpenAI(
         string text,
         string modelName)
     {
         if (string.IsNullOrEmpty(text))
             throw new ArgumentException("text is null or empty.");
 
-        // AIManager.OpenAIApiKey resolves via AIManagerBehaviour, EditorPrefs, then environment variables.
+        // AIManager.OpenAIApiKey resolves via AIManagerBehaviour, EditorUserSettings, then environment variables.
         var openAiKey = AIManager.OpenAIApiKey;
         if (string.IsNullOrEmpty(openAiKey))
-            throw new InvalidOperationException("OpenAIApiKey is not configured on AIManagerBehaviour, EditorPrefs, or environment variables.");
+            throw new InvalidOperationException("OpenAIApiKey is not configured on AIManagerBehaviour, EditorUserSettings, or environment variables.");
 
         // Request body for the OpenAI embeddings API.
         var body = new Dictionary<string, object>
@@ -85,7 +85,7 @@ public static class EmbeddingManager
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("Authorization", "Bearer " + openAiKey);
 
-            await req.SendWebRequest().ToUniTask();
+            await req.SendWebRequestAsync();
 
             if (req.result != UnityWebRequest.Result.Success)
             {
@@ -147,14 +147,14 @@ public static class EmbeddingManager
 
     #region Gemini Embeddings
 
-    private static async UniTask<SerializableEmbedding> CreateGeminiEmbeddingAsync(string text)
+    private static async Task<SerializableEmbedding> CreateGeminiEmbeddingAsync(string text)
     {
         if (string.IsNullOrEmpty(text))
             throw new ArgumentException("text is null or empty.");
 
         var googleKey = AIManager.GoogleApiKey;
         if (string.IsNullOrEmpty(googleKey))
-            throw new InvalidOperationException("GoogleApiKey is not configured on AIManagerBehaviour, EditorPrefs, or environment variables.");
+            throw new InvalidOperationException("GoogleApiKey is not configured on AIManagerBehaviour, EditorUserSettings, or environment variables.");
 
         const string modelName = "models/gemini-embedding-001";
         var body = new Dictionary<string, object>
@@ -174,7 +174,7 @@ public static class EmbeddingManager
         req.SetRequestHeader("Content-Type", "application/json");
 
         req.SetRequestHeader("x-goog-api-key", googleKey);
-        await req.SendWebRequest().ToUniTask();
+        await req.SendWebRequestAsync();
 
         if (req.result != UnityWebRequest.Result.Success)
         {
@@ -262,3 +262,4 @@ public static class EmbeddingManager
     }
     #endregion
 }
+
