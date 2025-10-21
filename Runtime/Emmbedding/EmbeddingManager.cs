@@ -85,7 +85,7 @@ public static class EmbeddingManager
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("Authorization", "Bearer " + openAiKey);
 
-            await req.SendWebRequestAsync();
+            await UnityWebRequestUtils.SendAsync(req);
 
             if (req.result != UnityWebRequest.Result.Success)
             {
@@ -174,7 +174,7 @@ public static class EmbeddingManager
         req.SetRequestHeader("Content-Type", "application/json");
 
         req.SetRequestHeader("x-goog-api-key", googleKey);
-        await req.SendWebRequestAsync();
+        await UnityWebRequestUtils.SendAsync(req);
 
         if (req.result != UnityWebRequest.Result.Success)
         {

@@ -52,6 +52,67 @@
 
 
 
+## �r�W�����L�[�� / ���摜���̓��o�͂ւ̑�ӂ�
+
+- `Message` �� `parts (List<MessageContent>)` �ɂ�鐶���ŁA�e�L�X�g�ƃC���[�W�����g�������܂��B`content` ���w�肵���ꍇ���A�ړI�Ƀe�L�X�g�p�[�g�Ƃ��Đ�p����܂��B
+- `MessageContent.FromImageData(byte[], mimeType)` �� `MessageContent.FromImageUrl(string url)` �Ō摜�����͂܂��B�C���f�b�N�o�[�f�ŏo�p����Ƃ��́A���̃w�b�_�ł̃f�[�^�C�A���O���g�p���ĉ����܂��B
+- ���摜�쐬�́A `AIManager.GenerateImagesAsync` (gemini-2.5-flash-image-preview ����) �������オ�C`ImageGenerationResponse` �����߂� `GeneratedImage` ������ ���摜�f�[�^��ɓ����܂��B
+- `Samples~/Example/VisionSamples.cs` �� Unity ���C���g�E���W���[���ł̑g�p��`[ContextMenu]` �ŕ\����Ă��܂��B
+
+### ���摜�ύX (Gemini 2.5 Flash Image Preview)
+
+```csharp
+var imageBytes = texture.EncodeToPNG();
+
+var editMessages = new List<Message>
+{
+    new Message
+    {
+        role = MessageRole.User,
+        parts = new List<MessageContent>
+        {
+            MessageContent.FromText("水彩画風にしてください。"),
+            MessageContent.FromImageData(imageBytes, "image/png")
+        }
+    }
+};
+
+var imageResponse = await AIManager.GenerateImagesAsync(
+    editMessages,
+    AIModelType.Gemini25FlashImagePreview);
+
+if (imageResponse?.images.Count > 0)
+{
+    var generated = imageResponse.images[0];
+    System.IO.File.WriteAllBytes("edited.png", generated.data);
+}
+```
+
+### ���摜�L�񋟂̑g�ݍ� (�r�W�����L�[���p)
+
+```csharp
+var photoBytes = photoTexture.EncodeToPNG();
+
+var describeMessages = new List<Message>
+{
+    new Message
+    {
+        role = MessageRole.User,
+        parts = new List<MessageContent>
+        {
+            MessageContent.FromText("この画像に写っている内容を説明してください。"),
+            MessageContent.FromImageData(photoBytes, "image/png")
+        }
+    }
+};
+
+var description = await AIManager.SendMessageAsync(
+    describeMessages,
+    AIModelType.Gemini25Flash); // GPT4o など他のビジョン対応モデルにも差し替え可能
+```
+
+> `MessageContent.FromImageData` に渡すバイト列は `Texture2D.EncodeToPNG()` や `System.IO.File.ReadAllBytes()` など任意の手段で用意できます。URL を直接指定したい場合は `MessageContent.FromImageUrl("https://...")` を使用してください。
+
 ## Async API
 
 - すべてのランタイムAPIは `Task` / `Task<T>` を返す構成になりました。追加パッケージは不要です。
