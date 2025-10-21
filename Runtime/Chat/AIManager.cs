@@ -103,12 +103,15 @@ public static class AIManager
     // Note: Do NOT serialize API keys. Keys are resolved at runtime from
     // environment variables or editor-only storage to avoid persisting secrets.
     public static string OpenAIApiKey => ResolveApiKey(b => b.OpenAIApiKey, new[] { "OPENAI_API_KEY" });
-    public static string GrokApiKey   => ResolveApiKey(b => b.GrokApiKey,   new[] { "GROK_API_KEY", "XAI_API_KEY" });
+    public static string GrokApiKey   => ResolveApiKey(b => b.GrokApiKey,   new[] { "GROK_API_KEY" });
     public static string GoogleApiKey => ResolveApiKey(b => b.GoogleApiKey, new[] { "GOOGLE_API_KEY" });
 
     private const string openAiEndpoint = "https://api.openai.com/v1/chat/completions";
     private const string grokEndpoint = "https://api.x.ai/v1/chat/completions";
     private const string geminiApiBase = "https://generativelanguage.googleapis.com/v1beta/models";
+#if UNITY_EDITOR
+    private const string editorIgnoreKeysConfig = "UnityLLMAPI.IGNORE_EDITOR_KEYS";
+#endif
 
     internal static void RegisterBehaviour(AIManagerBehaviour behaviour)
     {
@@ -185,18 +188,15 @@ public static class AIManager
         var editorKey = $"UnityLLMAPI.{envKey}";
         try
         {
+            if (!ShouldUseEditorStoredKeys())
+            {
+                return string.Empty;
+            }
+
             var value = UnityEditor.EditorUserSettings.GetConfigValue(editorKey);
             if (!string.IsNullOrEmpty(value))
             {
                 return value;
-            }
-
-            var legacy = UnityEditor.EditorPrefs.GetString(editorKey, string.Empty);
-            if (!string.IsNullOrEmpty(legacy))
-            {
-                UnityEditor.EditorUserSettings.SetConfigValue(editorKey, legacy);
-                UnityEditor.EditorPrefs.DeleteKey(editorKey);
-                return legacy;
             }
         }
         catch
@@ -205,6 +205,28 @@ public static class AIManager
         }
 
         return string.Empty;
+    }
+#endif
+
+#if UNITY_EDITOR
+    private static bool ShouldUseEditorStoredKeys()
+    {
+        try
+        {
+            var flag = UnityEditor.EditorUserSettings.GetConfigValue(editorIgnoreKeysConfig);
+            if (!string.IsNullOrEmpty(flag))
+            {
+                if (flag == "1") return false;
+                if (flag == "0") return true;
+                if (bool.TryParse(flag, out var parsed)) return !parsed;
+            }
+        }
+        catch
+        {
+            // ignored
+        }
+
+        return true;
     }
 #endif
 
@@ -241,7 +263,7 @@ public static class AIManager
                 return "Provide an OpenAI API key via AIManagerBehaviour, UnityLLMAPI.OPENAI_API_KEY (EditorUserSettings), or the OPENAI_API_KEY environment variable.";
             case AIModelType.Grok2:
             case AIModelType.Grok3:
-                return "Provide a Grok API key via AIManagerBehaviour, UnityLLMAPI.GROK_API_KEY (EditorUserSettings), or the GROK_API_KEY/XAI_API_KEY environment variables.";
+                return "Provide a Grok API key via AIManagerBehaviour, UnityLLMAPI.GROK_API_KEY (EditorUserSettings), or the GROK_API_KEY environment variable.";
             case AIModelType.Gemini25:
             case AIModelType.Gemini25Pro:
             case AIModelType.Gemini25Flash:

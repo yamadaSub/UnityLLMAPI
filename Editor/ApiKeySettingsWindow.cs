@@ -16,6 +16,9 @@ namespace UnityLLMAPI.Editor
         private string grok;
         private string google;
         private bool showValues = false;
+        private bool ignoreEditorKeys = false;
+
+        private const string PrefIgnoreEditorKeys = "UnityLLMAPI.IGNORE_EDITOR_KEYS";
 
         [MenuItem("Tools/UnityLLMAPI/Configure API Keys")]
         public static void Open()
@@ -30,6 +33,7 @@ namespace UnityLLMAPI.Editor
             openAI = LoadKey(PrefOpenAI);
             grok   = LoadKey(PrefGrok);
             google = LoadKey(PrefGoogle);
+            ignoreEditorKeys = LoadBool(PrefIgnoreEditorKeys, false);
         }
 
         private void Save()
@@ -52,34 +56,31 @@ namespace UnityLLMAPI.Editor
         private static string LoadKey(string key)
         {
             var value = EditorUserSettings.GetConfigValue(key);
-            if (!string.IsNullOrEmpty(value))
-            {
-                return value;
-            }
-
-            var legacy = EditorPrefs.GetString(key, string.Empty);
-            if (!string.IsNullOrEmpty(legacy))
-            {
-                EditorUserSettings.SetConfigValue(key, legacy);
-                EditorPrefs.DeleteKey(key);
-                return legacy;
-            }
-
-            return string.Empty;
+            return string.IsNullOrEmpty(value) ? string.Empty : value;
         }
 
         private static void SaveKey(string key, string value)
         {
-            if (string.IsNullOrEmpty(value))
+            EditorUserSettings.SetConfigValue(key, string.IsNullOrEmpty(value) ? null : value);
+        }
+
+        private static bool LoadBool(string key, bool defaultValue)
+        {
+            var stored = EditorUserSettings.GetConfigValue(key);
+            if (string.IsNullOrEmpty(stored))
             {
-                EditorUserSettings.SetConfigValue(key, null);
-            }
-            else
-            {
-                EditorUserSettings.SetConfigValue(key, value);
+                return defaultValue;
             }
 
-            EditorPrefs.DeleteKey(key);
+            if (stored == "1") return true;
+            if (stored == "0") return false;
+            if (bool.TryParse(stored, out var parsed)) return parsed;
+            return defaultValue;
+        }
+
+        private static void SaveBool(string key, bool value)
+        {
+            EditorUserSettings.SetConfigValue(key, value ? "1" : "0");
         }
 
         private static string ReadEnv(string key)
@@ -115,6 +116,20 @@ namespace UnityLLMAPI.Editor
                 showValues = EditorGUILayout.Toggle(showValues);
             }
 
+            EditorGUILayout.Space(4);
+
+            EditorGUI.BeginChangeCheck();
+            ignoreEditorKeys = EditorGUILayout.ToggleLeft("パッケージ動作をテストする（Editor設定を無視）", ignoreEditorKeys);
+            if (EditorGUI.EndChangeCheck())
+            {
+                SaveBool(PrefIgnoreEditorKeys, ignoreEditorKeys);
+            }
+
+            if (ignoreEditorKeys)
+            {
+                EditorGUILayout.HelpBox("パッケージ動作テスト中: EditorUserSettings に保存された API キーは API 呼び出しで使用されません。入力欄は参照のみで編集できません。", MessageType.Info);
+            }
+
             DrawKeySection(
                 title: "OpenAI",
                 envNames: new[] { "OPENAI_API_KEY" },
@@ -122,8 +137,8 @@ namespace UnityLLMAPI.Editor
                 prefKey: PrefOpenAI);
 
             DrawKeySection(
-                title: "Grok (x.ai) — use GROK_API_KEY or XAI_API_KEY",
-                envNames: new[] { "GROK_API_KEY", "XAI_API_KEY" },
+                title: "Grok (x.ai)",
+                envNames: new[] { "GROK_API_KEY" },
                 refValue: ref grok,
                 prefKey: PrefGrok);
 
@@ -154,13 +169,27 @@ namespace UnityLLMAPI.Editor
                     var envVal = ReadEnv(env);
                     EditorGUILayout.LabelField($"Env {env}", string.IsNullOrEmpty(envVal) ? "(not set)" : Mask(envVal));
                 }
-
-                var projectVal = LoadKey(prefKey);
-                EditorGUILayout.LabelField("EditorUserSettings", string.IsNullOrEmpty(projectVal) ? "(not set)" : Mask(projectVal));
             }
 
             // Input field (project-scoped value)
             var label = $"Project Key ({prefKey})";
+            if (ignoreEditorKeys)
+            {
+                using (new EditorGUI.DisabledScope(true))
+                {
+                    if (showValues)
+                    {
+                        EditorGUILayout.TextField(label, string.Empty);
+                    }
+                    else
+                    {
+                        EditorGUILayout.PasswordField(label, string.Empty);
+                    }
+                }
+
+                return;
+            }
+
             if (showValues)
             {
                 refValue = EditorGUILayout.TextField(label, refValue);
@@ -170,7 +199,7 @@ namespace UnityLLMAPI.Editor
                 refValue = EditorGUILayout.PasswordField(label, refValue);
             }
         }
+
     }
 }
 #endif
-

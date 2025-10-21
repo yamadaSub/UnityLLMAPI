@@ -27,7 +27,8 @@
     - `UnityLLMAPI.GROK_API_KEY`
     - `UnityLLMAPI.GOOGLE_API_KEY`
   - 保存先はプロジェクト直下の UserSettings/EditorUserSettings.asset です（プロジェクト毎に分離され、VCS へは含めません）。
-  - Grok(x.ai)は `GROK_API_KEY` と `XAI_API_KEY` のどちらかが設定されていれば利用できます（Editorウィンドウでは1項目に統合）。
+  - `パッケージ動作をテストする（Editor設定を無視）` トグルを ON にすると EditorUserSettings に保存された API キーを一時的に無視して、パッケージ配布時と同じ挙動を Unity Editor 内で確認できます。
+- Grok(x.ai)は `GROK_API_KEY` が設定されていれば利用できます。
 
 運用上の注意
 - APIキーが見つからない状態でリクエストを送ると、必要な環境変数名を含むわかりやすいエラーログを出して処理を中断します。
