@@ -1,69 +1,70 @@
-﻿UnityLLMAPI
+UnityLLMAPI
+===========
 
-概要
-- 実行時にのみAPIキーを解決し、アセット・シーン・Prefabへは一切保存しない方針のUnity向けLLM/Embeddings呼び出しパッケージです。
-- キーはプロジェクト内に残さず、環境変数またはEditor専用のEditorUserSettingsから取得します。
+Unity から大手 LLM / Embedding API を呼び出すための支援パッケージです。  
+API キーの取得、リクエスト生成、JSON Schema ベースの構造化応答、関数呼び出し、Gemini 画像入出力、埋め込みベクトル計算までを同じコード体系で扱えます。
 
-キーの設定方法
-- 解決順序（ランタイム）
-  1) 環境変数
-  2) Unity EditorUserSettings（Editorのみ）
+本ドキュメントではセットアップから主要な利用パターン、サンプルコードの場所までを俯瞰できるようにまとめています。
 
-- 設定する環境変数
-  - `OPENAI_API_KEY`
-  - `GROK_API_KEY` または `XAI_API_KEY`（どちらか片方で可）
-  - `GOOGLE_API_KEY`
+---
 
-- すぐに設定する例
-  - Windows（PowerShell / 現在のユーザー）
-    `[System.Environment]::SetEnvironmentVariable("OPENAI_API_KEY","<your_key>","User")`
-  - macOS/Linux（bash/zsh）
-    `export OPENAI_API_KEY=<your_key>`
+セットアップ
+------------
+1. **API キーを取得して環境に登録**
+   - 利用可能なキー: `OPENAI_API_KEY` / `GROK_API_KEY` または `XAI_API_KEY` / `GOOGLE_API_KEY`
+   - Windows (PowerShell):\
+     `Set-Item -Path Env:OPENAI_API_KEY -Value "<your_key>"`
+   - macOS / Linux (bash / zsh):\
+     `export OPENAI_API_KEY=<your_key>`
+2. **Unity Editor でのキー設定 (任意)**
+   - メニュー `Tools > UnityLLMAPI > Configure API Keys` から EditorUserSettings に保存可能  
+     （暗号化されずプロジェクト外に保存されるため、VCS へはコミット不要です）
+3. **ランタイム用のキー解決順序**
+   - `AIManagerBehaviour` (ヒエラルキー上のコンポーネント)
+   - EditorUserSettings (`UnityLLMAPI.OPENAI_API_KEY` など)
+   - 環境変数（Process → User → Machine）
 
-- Editorメニュー（EditorUserSettings）
-  - Unityメニュー: `Tools > UnityLLMAPI > Configure API Keys`
-  - 入力した値は以下のEditorUserSettingsキーに保存されます（ビルドやVCSには含まれません）
-    - `UnityLLMAPI.OPENAI_API_KEY`
-    - `UnityLLMAPI.GROK_API_KEY`
-    - `UnityLLMAPI.GOOGLE_API_KEY`
-  - 保存先はプロジェクト直下の UserSettings/EditorUserSettings.asset です（プロジェクト毎に分離され、VCS へは含めません）。
-  - `パッケージ動作をテストする（Editor設定を無視）` トグルを ON にすると EditorUserSettings に保存された API キーを一時的に無視して、パッケージ配布時と同じ挙動を Unity Editor 内で確認できます。
-- Grok(x.ai)は `GROK_API_KEY` が設定されていれば利用できます。
+---
 
-運用上の注意
-- APIキーが見つからない状態でリクエストを送ると、必要な環境変数名を含むわかりやすいエラーログを出して処理を中断します。
-- ローカル開発では環境変数の利用を推奨し、補助的にEditorUserSettingsを使用できます（Editor限定、ビルドには含まれません）。
+全体のワークフロー
+------------------
+1. **Message / MessageContent を組み立てる**  
+   - テキストは `Message.content` または `MessageContent.FromText()`  
+   - 画像は `MessageContent.FromImage()`（Texture から自動で PNG 化）または `FromImageData` / `FromImageUrl`
+2. **AIManager / EmbeddingManager の API を呼ぶ**  
+   - `SendMessageAsync`、`SendStructuredMessageAsync`、`SendFunctionCallMessageAsync`、`GenerateImagesAsync` など
+3. **レスポンスを処理する**  
+   - テキスト応答は string、構造化応答は任意の型、Function 呼び出しは `IJsonSchema`、画像生成は `ImageGenerationResponse`
+4. **必要に応じて補助ユーティリティを活用**  
+   - `TextureEncodingUtility.TryGetPngBytes`：Texture→PNG の安全な変換  
+   - `UnityWebRequestUtils.SendAsync`：全 API 呼び出しで共通化した await パターン
 
-本番運用の推奨構成（サーバープロキシ）
-- クライアント（ゲーム/アプリ）にAPIキーを同梱しないでください。
-- 代わりに自前のバックエンド経由でLLMリクエストを転送する構成を推奨します。
-  - サーバー側で各プロバイダのAPIキーを安全に保管（環境変数やSecret Manager）。
-  - クライアント用に最小限のエンドポイント（例: `/chat`, `/embeddings`）を公開。
-  - 入力検証・スキーマ整形、認証、レート制限、課金/クオータ管理をサーバー側で実施。
-  - 必要な情報のみをクライアントへ返却し、ログ・モニタリングもサーバー側で行う。
+---
 
-関連実装のメモ
-- `Runtime/Chat/AIManager.cs` は `OpenAIApiKey` / `GrokApiKey` / `GoogleApiKey` を実行時に解決します。
-  - 環境変数 →（Editor時のみ）`UnityEditor.EditorUserSettings` の順で解決。
-  - いずれもアセットやシーンに保存されません。
-
-サンプル
-- `Samples~/Example` に簡単な使用例があります。動作には対応する環境変数またはEditorUserSettingsの設定が必要です。
-
-
-
-## �r�W�����L�[�� / ���摜���̓��o�͂ւ̑�ӂ�
-
-- `Message` �� `parts (List<MessageContent>)` �ɂ�鐶���ŁA�e�L�X�g�ƃC���[�W�����g�������܂��B`content` ���w�肵���ꍇ���A�ړI�Ƀe�L�X�g�p�[�g�Ƃ��Đ�p����܂��B
-- `MessageContent.FromImageData(byte[], mimeType)` �� `MessageContent.FromImageUrl(string url)` �Ō摜�����͂܂��B�C���f�b�N�o�[�f�ŏo�p����Ƃ��́A���̃w�b�_�ł̃f�[�^�C�A���O���g�p���ĉ����܂��B
-- ���摜�쐬�́A `AIManager.GenerateImagesAsync` (gemini-2.5-flash-image-preview ����) �������オ�C`ImageGenerationResponse` �����߂� `GeneratedImage` ������ ���摜�f�[�^��ɓ����܂��B
-- `Samples~/Example/VisionSamples.cs` �� Unity ���C���g�E���W���[���ł̑g�p��`[ContextMenu]` �ŕ\����Ă��܂��B
-
-### ���摜�ύX (Gemini 2.5 Flash Image Preview)
-
+主要機能とポイント
+------------------
+### 1. テキスト / マルチモーダルチャット
 ```csharp
-var imageBytes = texture.EncodeToPNG();
+var messages = new List<Message>
+{
+    new Message { role = MessageRole.System, content = "あなたは Unity エンジニアのアシスタントです。" },
+    new Message { role = MessageRole.User,   content = "RuntimeInitializeOnLoadMethod の使い方を教えて。" }
+};
+var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini25Flash);
+```
 
+### 2. JSON Schema ベースの構造化応答
+```csharp
+var invoice = await AIManager.SendStructuredMessageAsync<Invoice>(messages, AIModelType.GPT4o);
+```
+指定した型に合わせて JSON Schema を自動生成し、応答をデシリアライズします。
+
+### 3. RealTime Schema / Function Calling
+- `SendStructuredMessageWithRealTimeSchemaAsync`：`RealTimeJsonSchema` の値を都度更新
+- `SendFunctionCallMessageAsync`：LLM からの関数呼び出し結果を `IJsonSchema` として取得
+
+### 4. 画像入出力 (Gemini 2.5 Flash Image Preview)
+```csharp
 var editMessages = new List<Message>
 {
     new Message
@@ -72,83 +73,64 @@ var editMessages = new List<Message>
         parts = new List<MessageContent>
         {
             MessageContent.FromText("水彩画風にしてください。"),
-            MessageContent.FromImageData(imageBytes, "image/png")
+            MessageContent.FromImage(texture) // Texture2D から自動 PNG 変換
         }
     }
 };
-
-var imageResponse = await AIManager.GenerateImagesAsync(
-    editMessages,
-    AIModelType.Gemini25FlashImagePreview);
-
-if (imageResponse?.images.Count > 0)
-{
-    var generated = imageResponse.images[0];
-    System.IO.File.WriteAllBytes("edited.png", generated.data);
-}
+var images = await AIManager.GenerateImagesAsync(editMessages);
 ```
 
-### ���摜�L�񋟂̑g�ݍ� (�r�W�����L�[���p)
-
+### 5. 埋め込みベクトル
 ```csharp
-var photoBytes = photoTexture.EncodeToPNG();
-
-var describeMessages = new List<Message>
-{
-    new Message
-    {
-        role = MessageRole.User,
-        parts = new List<MessageContent>
-        {
-            MessageContent.FromText("この画像に写っている内容を説明してください。"),
-            MessageContent.FromImageData(photoBytes, "image/png")
-        }
-    }
-};
-
-var description = await AIManager.SendMessageAsync(
-    describeMessages,
-    AIModelType.Gemini25Flash); // GPT4o など他のビジョン対応モデルにも差し替え可能
+var embedding = await EmbeddingManager.CreateEmbeddingAsync("Unity loves C#");
+var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpusEmbeddings);
 ```
 
-> `MessageContent.FromImageData` に渡すバイト列は `Texture2D.EncodeToPNG()` や `System.IO.File.ReadAllBytes()` など任意の手段で用意できます。URL を直接指定したい場合は `MessageContent.FromImageUrl("https://...")` を使用してください。
+---
 
-## Async API
+サンプルコード
+--------------
+| ファイル | 内容 |
+| --- | --- |
+| `Samples~/Example/ExampleUsage.cs` | テキストチャット / 構造化応答 / RealTime Schema / Function Calling |
+| `Samples~/Example/VisionSamples.cs` | Gemini 画像編集・Vision モデルでの画像解析 |
+| `Samples~/Example/EmbeddingSample.cs` | Embedding の線形演算とコサイン類似度計算 |
 
-- すべてのランタイムAPIは `Task` / `Task<T>` を返す構成になりました。追加パッケージは不要です。
+どのサンプルも MonoBehaviour をシーンに配置し、インスペクターの ContextMenu から実行できます。  
+画像系は `Application.persistentDataPath` に生成結果を保存します。
 
-- `await AIManager.SendMessageAsync(messages, AIModelType.GPT4o);` のように利用できます。
+---
 
+API リファレンス（抜粋）
+------------------------
+### Message / MessageContent
+- `Message.content`：テキストのみの簡易入力
+- `Message.parts`：`MessageContent` のリスト。テキスト・画像を混在させる場合はこちらを使用
+- `MessageContent.FromImage(Texture texture, string mime = "image/png")`：Texture を PNG に変換して画像パートを生成（非 readable も自動対応）
+- `MessageContent.FromImageData(byte[] data, string mime)`：既存のバイト列から生成
+- `MessageContent.FromImageUrl(string url)`：URL 経由で画像を参照
 
+### AIManager
+- `SendMessageAsync`：通常のチャット
+- `SendStructuredMessageAsync<T>`：構造化レスポンス（JSON Schema）
+- `SendStructuredMessageWithRealTimeSchemaAsync`：RealTimeJsonSchema の値更新
+- `SendFunctionCallMessageAsync`：LLM からの関数呼び出し結果を受け取り、`IJsonSchema` を返す
+- `GenerateImagesAsync` / `GenerateImageAsync`：Gemini 画像生成
 
-```csharp
+### EmbeddingManager
+- `CreateEmbeddingAsync(string text, EmmbeddingModelType model)`：OpenAI / Gemini の埋め込みを取得
+- `RankByCosine`：複数の埋め込みに対してコサイン類似度でランク付け
 
-var reply = await AIManager.SendMessageAsync(history, AIModelType.GPT4o);
+---
 
-var embedding = await EmbeddingManager.CreateEmbeddingAsync("hello world");
+補足・注意点
+------------
+- 画像生成ではデフォルトで PNG を扱います。JPEG 等が必要な場合は `initBody` で `"generationConfig"` を追加し、Gemini 側の仕様に合わせてください。
+- GPU 読み戻しは環境によってコストが大きくなる場合があります。頻繁に呼び出す場合はテクスチャをあらかじめ readable にしておくことを推奨します。
+- API キーが設定されていない場合はエラーログでヒントを表示します。まずは `AIManagerBehaviour` の設定状態を確認してください。
 
-```
+---
 
-
-
-## Coroutine Integration
-
-- `Runtime/Common/TaskCoroutineExtensions.cs` にコルーチン用のブリッジを用意しました。
-
-- `StartCoroutine(AIManager.SendMessageAsync(...).AsCoroutine(result => { ... }))` の形で結果を受け取れます。
-
-
-
-```csharp
-
-yield return AIManager
-
-    .SendMessageAsync(history, AIModelType.GPT4o)
-
-    .AsCoroutine(result => Debug.Log(result),
-
-                 error => Debug.LogError(error));
-
-```
-
-
+ライセンス
+----------
+本パッケージは Unity プロジェクト内での利用を想定しています。詳細はリポジトリのライセンスファイルをご覧ください。

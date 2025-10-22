@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 #region Common Types
 
 /// <summary>
-/// Supported embedding model flavours.
+/// 利用可能な埋め込みモデル種別。
 /// </summary>
 public enum EmmbeddingModelType
 {
@@ -19,8 +19,8 @@ public enum EmmbeddingModelType
 #endregion
 
 /// <summary>
-/// Static helper for retrieving embedding vectors from OpenAI or Gemini.
-/// API keys are resolved via <see cref="AIManager"/>.
+/// OpenAI / Gemini の埋め込みベクトルを取得するためのヘルパークラス。
+/// API キーの解決は <see cref="AIManager"/> と共通である。
 /// </summary>
 public static class EmbeddingManager
 {
@@ -29,10 +29,10 @@ public static class EmbeddingManager
     private const string geminiEmbeddingsEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent";
 
     /// <summary>
-    /// Retrieves an embedding vector for the supplied text.
+    /// 指定テキストに対する埋め込みベクトルを取得する。
     /// </summary>
-    /// <param name="text">Single text input.</param>
-    /// <param name="model">Embedding backend to use.</param>
+    /// <param name="text">埋め込み対象テキスト。</param>
+    /// <param name="model">使用するバックエンド。</param>
     public static async Task<SerializableEmbedding> CreateEmbeddingAsync(
         string text,
         EmmbeddingModelType model = EmmbeddingModelType.Gemini01)
@@ -52,10 +52,10 @@ public static class EmbeddingManager
     #region OpenAI Embeddings
 
     /// <summary>
-    /// Calls the OpenAI embeddings endpoint for the supplied text and model name.
+    /// OpenAI の埋め込みエンドポイントを呼び出す。
     /// </summary>
-    /// <param name="text">Single text input.</param>
-    /// <param name="modelName">OpenAI embedding model identifier.</param>
+    /// <param name="text">埋め込み対象テキスト。</param>
+    /// <param name="modelName">OpenAI モデル名。</param>
     public static async Task<SerializableEmbedding> CreateEmbeddingAsyncOpenAI(
         string text,
         string modelName)
@@ -63,12 +63,12 @@ public static class EmbeddingManager
         if (string.IsNullOrEmpty(text))
             throw new ArgumentException("text is null or empty.");
 
-        // AIManager.OpenAIApiKey resolves via AIManagerBehaviour, EditorUserSettings, then environment variables.
+        // API キーは AIManagerBehaviour → EditorUserSettings → 環境変数 の順に解決
         var openAiKey = AIManager.OpenAIApiKey;
         if (string.IsNullOrEmpty(openAiKey))
             throw new InvalidOperationException("OpenAIApiKey is not configured on AIManagerBehaviour, EditorUserSettings, or environment variables.");
 
-        // Request body for the OpenAI embeddings API.
+        // OpenAI Embeddings API のリクエストボディ
         var body = new Dictionary<string, object>
         {
             { "model", modelName},
@@ -147,6 +147,9 @@ public static class EmbeddingManager
 
     #region Gemini Embeddings
 
+    /// <summary>
+    /// Gemini Embeddings API を呼び出す。
+    /// </summary>
     private static async Task<SerializableEmbedding> CreateGeminiEmbeddingAsync(string text)
     {
         if (string.IsNullOrEmpty(text))

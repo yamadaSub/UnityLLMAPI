@@ -1,33 +1,36 @@
-// 例: 任意の MonoBehaviour から
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// EmbeddingManager を利用して単語ベクトルの演算と類似度計算を行うサンプル。
+/// Start で自動的に実行され、結果は Console に出力される。
+/// </summary>
 public class EmbeddingSample : MonoBehaviour
 {
     private async void Start()
     {
-        // king - man + woman ≒ queen
+        // king - man + woman ≒ queen を再現する例
         var king = await EmbeddingManager.CreateEmbeddingAsync("king");
         var man = await EmbeddingManager.CreateEmbeddingAsync("man");
         var woman = await EmbeddingManager.CreateEmbeddingAsync("woman");
 
-        // 算術
-        var query = (king - man + woman).Normalized();  // 仕上げに正規化
+        // ベクトルの線形演算後、Cosine 計算に備えて正規化
+        var query = (king - man + woman).Normalized();
 
-        Debug.Log($"コーパス構築");
-        var corpusWard = new List<string> { "queen", "king", "woman", "man" };
+        var corpusWords = new List<string> { "queen", "king", "woman", "man" };
         var corpus = new List<SerializableEmbedding>();
-        for (int i = 0; i < corpusWard.Count; i++) corpus.Add(await EmbeddingManager.CreateEmbeddingAsync(corpusWard[i]));
+        foreach (var word in corpusWords)
+        {
+            corpus.Add(await EmbeddingManager.CreateEmbeddingAsync(word));
+        }
 
-        // 既存の EmbeddingSimilarity.RankByCosine を使って上位を取得
-        Debug.Log($"類似度計算");
+        Debug.Log("[EmbeddingSample] 類似度計算 (Cosine)");
         var ranked = EmbeddingManager.RankByCosine(query, corpus, topK: -1);
 
         for (int i = 0; i < ranked.Count; i++)
         {
-            var r = ranked[i];
-            var word = corpusWard[r.Index];
-            Debug.Log($"{i}: {word} ({r.Score})");
+            var result = ranked[i];
+            Debug.Log($"{i}: {corpusWords[result.Index]} (score={result.Score})");
         }
     }
 }

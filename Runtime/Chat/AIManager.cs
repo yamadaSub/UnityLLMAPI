@@ -110,6 +110,27 @@ public class MessageContent
             data = bytes,
             mimeType = string.IsNullOrEmpty(mime) ? "image/png" : mime
         };
+
+    /// <summary>
+    /// Unity の Texture から直接 MessageContent を生成するヘルパー。
+    /// 非 readable な Texture2D が渡された場合でも、GPU 読み戻しにより PNG 化を試みる。
+    /// </summary>
+    public static MessageContent FromImage(Texture texture, string mime = "image/png", bool allowGpuReadback = true, bool logWarnings = true)
+    {
+        if (texture == null)
+        {
+            if (logWarnings) Debug.LogWarning("MessageContent.FromImage: texture is null.");
+            return null;
+        }
+
+        if (!TextureEncodingUtility.TryGetPngBytes(texture, out var png, allowGpuReadback, logWarnings))
+        {
+            if (logWarnings) Debug.LogWarning("MessageContent.FromImage: Failed to encode texture to PNG.");
+            return null;
+        }
+
+        return FromImageData(png, mime);
+    }
 }
 
 #region Image Responses
@@ -146,7 +167,10 @@ public class ImageGenerationResponse
 
 public class FunctionSchema<T> : RealTimeJsonSchema<T> where T : SchemaParameter
 {
-    string Description { get; }
+    /// <summary>
+    /// 関数の説明文。GenerateJsonSchema で function.description として使用される。
+    /// </summary>
+    public string Description { get; set; } = string.Empty;
     public FunctionSchema(string schemaName) : base(schemaName)
     {
     }
@@ -742,12 +766,13 @@ public static class AIManager
     }
 
     /// <summary>
-    /// Generates images using a vision-capable model. Prompts can include both text and image parts (for edits).
+    /// Gemini 2.5 Flash Image Preview を用いて画像生成（および画像編集）を行う。
+    /// プロンプトにはテキスト・画像パートのいずれも含めることができる。
     /// </summary>
-    /// <param name="messages">Prompt messages including any inline image parts.</param>
-    /// <param name="model">Gemini model to target. Defaults to gemini-2.5-flash-image-preview.</param>
-    /// <param name="initBody">Optional additional fields to merge into the JSON body (e.g., image_count).</param>
-    /// <returns>An image generation response containing decoded image bytes when successful.</returns>
+    /// <param name="messages">ユーザー／システムメッセージのリスト。画像編集時は画像パートを含める。</param>
+    /// <param name="model">利用するモデル。現在は gemini-2.5-flash-image-preview のみ対応。</param>
+    /// <param name="initBody">generationConfig 等の追加パラメーターを付与したい場合に使用。</param>
+    /// <returns>生成された画像群と元レスポンス JSON を格納した <see cref="ImageGenerationResponse"/>。</returns>
     public static async Task<ImageGenerationResponse> GenerateImagesAsync(
         List<Message> messages,
         AIModelType model = AIModelType.Gemini25FlashImagePreview,
@@ -769,6 +794,7 @@ public static class AIManager
         var modelName = GetModelName(model);
         var endpoint = $"{baseEndpoint}/{modelName}:generateContent";
 
+        // Gemini リクエスト形式に合わせて Role/Parts を構築
         var contents = BuildGeminiContents(messages);
         if (contents.Count == 0)
         {
@@ -821,6 +847,7 @@ public static class AIManager
                 rawJson = text
             };
 
+            // 新しいプレビュー API は generatedImages / generated_images のどちらかに結果を返す
             var generated = root?["generatedImages"] as Newtonsoft.Json.Linq.JArray
                             ?? root?["generated_images"] as Newtonsoft.Json.Linq.JArray;
             if (generated != null)
@@ -848,6 +875,7 @@ public static class AIManager
             }
             else
             {
+                // 上記フィールドが無い場合は candidates[].content.parts[].inline_data として返却される
                 var parts = root?["candidates"]?[0]?["content"]?["parts"] as Newtonsoft.Json.Linq.JArray;
                 if (parts != null)
                 {

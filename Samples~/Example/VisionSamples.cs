@@ -1,26 +1,29 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// 画像編集・画像認識ワークフローのサンプル。
+/// Gemini 2.5 Flash Image Preview を利用した編集、および Vision モデルへの画像解析を実演する。
+/// </summary>
 public class VisionSamples : MonoBehaviour
 {
     [Header("Image Edit (Gemini 2.5 Flash Image Preview)")]
-    [Tooltip("Source texture that will be edited. Texture must be readable so EncodeToPNG succeeds.")]
+    [Tooltip("編集の元となるテクスチャ。非 readable でも GPU 読み戻しで処理します。")]
     public Texture2D sourceImage;
 
     [TextArea]
-    [Tooltip("Instruction describing how the source image should be edited.")]
+    [Tooltip("画像編集時にモデルへ伝える指示。空の場合は『水彩画風にしてください。』を使用します。")]
     public string editInstruction = "水彩画風にしてください。";
 
     [Header("Image Recognition")]
-    [Tooltip("Image that will be described by a multimodal model.")]
+    [Tooltip("マルチモーダルモデルに解析させる画像。")]
     public Texture2D imageToDescribe;
 
-    [Tooltip("Vision-capable model to use for recognition. Gemini 2.5 Flash and GPT-4o both support image prompts.")]
+    [Tooltip("画像入力に対応したモデル。Gemini 2.5 Flash や GPT-4o などを指定できます。")]
     public AIModelType recognitionModel = AIModelType.Gemini25Flash;
 
     [TextArea]
-    [Tooltip("Prompt that accompanies the recognition image. Leave empty to use a default prompt.")]
+    [Tooltip("画像説明用の追加プロンプト。空の場合は一般的な説明を要求します。")]
     public string recognitionPrompt = "この画像に写っている内容を説明してください。";
 
     [ContextMenu("Generate Edited Image")]
@@ -28,16 +31,19 @@ public class VisionSamples : MonoBehaviour
     {
         if (sourceImage == null)
         {
-            Debug.LogWarning("VisionSamples.GenerateEditedImageAsync: Assign a readable sourceImage texture.");
+            Debug.LogWarning("VisionSamples.GenerateEditedImageAsync: sourceImage が未設定です。");
             return;
         }
 
-        if (!TryGetPngBytes(sourceImage, out var imageBytes))
+        // Texture から PNG への変換を含む画像パートを作成（非 readable なテクスチャも自動対応）
+        var imagePart = MessageContent.FromImage(sourceImage, logWarnings: true);
+        if (imagePart == null)
         {
-            Debug.LogWarning("VisionSamples.GenerateEditedImageAsync: Failed to encode source image to PNG. Ensure the texture is marked readable or supported for GPU readback.");
+            Debug.LogWarning("VisionSamples.GenerateEditedImageAsync: 画像のエンコードに失敗しました。Import Settings を確認してください。");
             return;
         }
 
+        // Gemini へ渡すユーザーメッセージ（編集指示 + 元画像）
         var prompts = new List<Message>
         {
             new Message
@@ -46,14 +52,13 @@ public class VisionSamples : MonoBehaviour
                 parts = new List<MessageContent>
                 {
                     MessageContent.FromText(string.IsNullOrWhiteSpace(editInstruction) ? "Add a watercolor effect." : editInstruction),
-                    MessageContent.FromImageData(imageBytes, "image/png")
+                    imagePart
                 }
             }
         };
 
-        var response = await AIManager.GenerateImagesAsync(
-            prompts,
-            AIModelType.Gemini25FlashImagePreview);
+        // 画像生成 API を実行
+        var response = await AIManager.GenerateImagesAsync(prompts, AIModelType.Gemini25FlashImagePreview);
 
         if (response?.images.Count > 0)
         {
@@ -68,7 +73,7 @@ public class VisionSamples : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("VisionSamples.GenerateEditedImageAsync: No image returned from Gemini.");
+            Debug.LogWarning("VisionSamples.GenerateEditedImageAsync: 画像が返されませんでした。");
         }
     }
 
@@ -77,13 +82,15 @@ public class VisionSamples : MonoBehaviour
     {
         if (imageToDescribe == null)
         {
-            Debug.LogWarning("VisionSamples.DescribeImageAsync: Assign an imageToDescribe texture.");
+            Debug.LogWarning("VisionSamples.DescribeImageAsync: imageToDescribe が未設定です。");
             return;
         }
 
-        if (!TryGetPngBytes(imageToDescribe, out var imageBytes))
+        // Vision モデルへ渡す画像パートを生成
+        var imagePart = MessageContent.FromImage(imageToDescribe, logWarnings: true);
+        if (imagePart == null)
         {
-            Debug.LogWarning("VisionSamples.DescribeImageAsync: Failed to encode image to PNG. Ensure the texture is readable.");
+            Debug.LogWarning("VisionSamples.DescribeImageAsync: 画像のエンコードに失敗しました。Import Settings を確認してください。");
             return;
         }
 
@@ -99,67 +106,20 @@ public class VisionSamples : MonoBehaviour
                 parts = new List<MessageContent>
                 {
                     MessageContent.FromText(promptText),
-                    MessageContent.FromImageData(imageBytes, "image/png")
+                    imagePart
                 }
             }
         };
 
+        // Vision 対応モデルで画像を解析
         var reply = await AIManager.SendMessageAsync(messages, recognitionModel);
         if (string.IsNullOrEmpty(reply))
         {
-            Debug.LogWarning($"VisionSamples.DescribeImageAsync: No response returned from {recognitionModel}.");
+            Debug.LogWarning($"VisionSamples.DescribeImageAsync: {recognitionModel} から応答が得られませんでした。");
         }
         else
         {
             Debug.Log($"Vision model ({recognitionModel}) response:\n{reply}");
-        }
-    }
-
-    private static bool TryGetPngBytes(Texture2D texture, out byte[] pngBytes)
-    {
-        pngBytes = null;
-        if (texture == null) return false;
-
-        try
-        {
-            pngBytes = texture.EncodeToPNG();
-            if (pngBytes != null && pngBytes.Length > 0) return true;
-        }
-        catch (Exception ex) when (ex is UnityException || ex is ArgumentException)
-        {
-            // Fall through to GPU copy path.
-        }
-
-        // Attempt to read back via RenderTexture for non-readable textures
-        RenderTexture tempRT = null;
-        Texture2D readableCopy = null;
-        var previous = RenderTexture.active;
-        try
-        {
-            tempRT = RenderTexture.GetTemporary(texture.width, texture.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            Graphics.Blit(texture, tempRT);
-
-            RenderTexture.active = tempRT;
-            readableCopy = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
-            readableCopy.ReadPixels(new Rect(0, 0, tempRT.width, tempRT.height), 0, 0);
-            readableCopy.Apply();
-            pngBytes = readableCopy.EncodeToPNG();
-            return pngBytes != null && pngBytes.Length > 0;
-        }
-        catch (Exception ex)
-        {
-            Debug.LogWarning($"VisionSamples: GPU readback failed. {ex.Message}");
-            return false;
-        }
-        finally
-        {
-            RenderTexture.active = previous;
-            if (tempRT != null) RenderTexture.ReleaseTemporary(tempRT);
-            if (readableCopy != null)
-            {
-                if (Application.isPlaying) Destroy(readableCopy);
-                else DestroyImmediate(readableCopy);
-            }
         }
     }
 }
