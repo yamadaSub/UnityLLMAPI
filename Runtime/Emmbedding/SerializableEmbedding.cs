@@ -225,7 +225,7 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
     }
 
     /// <summary>内積</summary>
-    public float Dot(SerializableEmbedding b)
+    public float Dot(SerializableEmbedding other)
     {
         EnsureSameDim(other);
         var va = ToFloatArray();
@@ -236,7 +236,7 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
     }
 
     /// <summary>コサイン類似度（0除算は0）。</summary>
-    public float CosineSimilarity(SerializableEmbedding b)
+    public float CosineSimilarity(SerializableEmbedding other)
     {
         EnsureSameDim(other);
         var va = ToFloatArray();
