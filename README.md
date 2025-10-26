@@ -1,4 +1,4 @@
-UnityLLMAPI
+﻿UnityLLMAPI
 ===========
 
 Unity から大手 LLM / Embedding API を呼び出すための支援パッケージです。  

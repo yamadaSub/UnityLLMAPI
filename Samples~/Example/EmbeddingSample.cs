@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// EmbeddingManager を利用して単語ベクトルの演算と類似度計算を行うサンプル。
-/// Start で自動的に実行され、結果は Console に出力される。
+/// EmbeddingManager を用いたベクトル演算と類似度計算、Hadamard 演算のサンプル。
+/// スクリプトをシーンに配置すると Start で自動実行され、結果が Console に出力される。
 /// </summary>
 public class EmbeddingSample : MonoBehaviour
 {
@@ -14,7 +14,7 @@ public class EmbeddingSample : MonoBehaviour
         var man = await EmbeddingManager.CreateEmbeddingAsync("man");
         var woman = await EmbeddingManager.CreateEmbeddingAsync("woman");
 
-        // ベクトルの線形演算後、Cosine 計算に備えて正規化
+        // 線形演算後に正規化してコサイン類似度に備える
         var query = (king - man + woman).Normalized();
 
         var corpusWords = new List<string> { "queen", "king", "woman", "man" };
@@ -26,11 +26,17 @@ public class EmbeddingSample : MonoBehaviour
 
         Debug.Log("[EmbeddingSample] 類似度計算 (Cosine)");
         var ranked = EmbeddingManager.RankByCosine(query, corpus, topK: -1);
-
         for (int i = 0; i < ranked.Count; i++)
         {
             var result = ranked[i];
             Debug.Log($"{i}: {corpusWords[result.Index]} (score={result.Score})");
         }
+
+        // Hadamard 積 / 除算の例（同次元ベクトルが前提）
+        var product = king.HadamardProduct(man);
+        var quotient = king.HadamardQuotient(man);
+        var quotientArray = quotient.ToFloatArray();
+        var sampleValue = quotientArray.Length > 0 ? quotientArray[0] : 0f;
+        Debug.Log($"[EmbeddingSample] Hadamard 積の要素数: {product.ToFloatArray().Length}, Hadamard 除算の一要素: {sampleValue}");
     }
 }

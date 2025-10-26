@@ -3,32 +3,35 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// –„‚ß‚İƒxƒNƒgƒ‹‚ğuint8—Êq‰» + scalev‚ÅŒy—ÊƒVƒŠƒAƒ‰ƒCƒY‚·‚éŒ^B
-/// ScriptableObject ‚É‘å—ÊŠi”[‚µ‚Ä‚à“Ç‚İ‚İ•‰‰×‚ª¬‚³‚¢B
+/// åŸ‹ã‚è¾¼ã¿ãƒ™ã‚¯ãƒˆãƒ«ã‚’é‡å­åŒ–ã—ã¦ä¿æŒã—ã€Unity ä¸Šã§ã®ã‚·ãƒªã‚¢ãƒ©ã‚¤ã‚ºã‚’å®¹æ˜“ã«ã™ã‚‹ã‚¯ãƒ©ã‚¹ã€‚
+/// é‡å­åŒ–ã•ã‚ŒãŸãƒ‡ãƒ¼ã‚¿ã‹ã‚‰ã®å¾©å…ƒã‚„ã€å„ç¨®ãƒ™ã‚¯ãƒˆãƒ«æ¼”ç®—ã‚’ã‚µãƒãƒ¼ãƒˆã™ã‚‹ã€‚
 /// </summary>
 [Serializable]
 public class SerializableEmbedding : ISerializationCallbackReceiver
 {
-    [SerializeField, Tooltip("—Êq‰»Ï‚İ‚Ìƒf[ƒ^i-127..127j")]
-    private byte[] quantized; // À‘Ì‚Í sbyte ‚ğ byte ‚É‹l‚ß‘Ö‚¦‚½‚à‚Ì
-    [SerializeField, Tooltip("•œŒ³—pƒXƒP[ƒ‹imax(|x|) / 127fj")]
+    [SerializeField, Tooltip("é‡å­åŒ–æ¸ˆã¿ã®ãƒ™ã‚¯ãƒˆãƒ«å€¤ï¼ˆå…ƒã®ç¯„å›² -127..127 ã‚’ 0..255 ã«å†™åƒã—ãŸã‚‚ã®ï¼‰ã€‚")]
+    private byte[] quantized;
+
+    [SerializeField, Tooltip("å…ƒã® float å€¤ã«æˆ»ã™éš›ã®ã‚¹ã‚±ãƒ¼ãƒ«å€¤ (max(|x|) / 127)ã€‚")]
     private float scale;
-    [SerializeField, Tooltip("Œ³‚ÌŸŒ³”i•œŒ³‚Ì®‡«—pj")]
+
+    [SerializeField, Tooltip("å…ƒã®ãƒ™ã‚¯ãƒˆãƒ«ã®æ¬¡å…ƒæ•°ã€‚")]
     private int dimension;
-    [SerializeField, Tooltip("Œ³‚ÌŸŒ³”i•œŒ³‚Ì®‡«—pj")]
-    private string model =string.Empty; // ‚Ç‚Ìƒ‚ƒfƒ‹‚Åì¬‚µ‚½‚©‚Ìƒƒ^î•ñ
 
+    [SerializeField, Tooltip("åŸ‹ã‚è¾¼ã¿ã‚’ç”Ÿæˆã—ãŸãƒ¢ãƒ‡ãƒ«åã€‚")]
+    private string model = string.Empty;
 
-    [NonSerialized] private float[] cache; // ’x‰„•œŒ³ƒLƒƒƒbƒVƒ…
+    [NonSerialized] private float[] cache; // é…å»¶å¾©å…ƒã‚­ãƒ£ãƒƒã‚·ãƒ¥
 
     public string Model => model;
     public int Dimension => dimension;
 
-    public SerializableEmbedding(string modelName) 
+    public SerializableEmbedding(string modelName)
     {
         model = modelName;
     }
-    /// <summary>Œ»İ‚Ì—Êq‰»ƒf[ƒ^‚ğ float ”z—ñ‚Ö•œŒ³i‰‰ñ‚Ì‚İƒfƒR[ƒh•ƒLƒƒƒbƒVƒ…j</summary>
+
+    /// <summary>é‡å­åŒ–ãƒ‡ãƒ¼ã‚¿ã‚’ float é…åˆ—ã«å¾©å…ƒã—ã¦è¿”ã™ï¼ˆåˆå›ä»¥é™ã¯ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚’åˆ©ç”¨ï¼‰ã€‚</summary>
     public float[] ToFloatArray()
     {
         if (cache != null) return cache;
@@ -37,19 +40,19 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
             cache = Array.Empty<float>();
             return cache;
         }
+
         var arr = new float[dimension];
         for (int i = 0; i < dimension; i++)
         {
-            // byte(0..255) ¨ sbyte(-128..127) ’ˆÓ: -128 ‚ÍƒNƒŠƒbƒv‚³‚ê“¾‚é‚Ì‚Å•„†Šg’£‚É‹C‚ğ‚Â‚¯‚é
             int v = quantized[i];
-            if (v > 127) v -= 256; // sbyte ‰»
-            arr[i] = v * scale;    // ‹t—Êq‰»
+            if (v > 127) v -= 256; // sbyte åŒ–
+            arr[i] = v * scale;    // é€†é‡å­åŒ–
         }
         cache = arr;
         return cache;
     }
 
-    /// <summary>float ”z—ñ‚©‚ç—Êq‰»‚µ‚ÄŠi”[B‘å‚«‚È”z—ñ‚à’áƒRƒXƒg‚Å•Û‘¶‰Â”\B</summary>
+    /// <summary>ä¸ãˆã‚‰ã‚ŒãŸ float é…åˆ—ã‚’é‡å­åŒ–ã—ã€å†…éƒ¨ã«ä¿å­˜ã™ã‚‹ã€‚</summary>
     public void SetFromFloatArray(ReadOnlySpan<float> source)
     {
         dimension = source.Length;
@@ -61,15 +64,13 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
             return;
         }
 
-        // Å‘åâ‘Î’l‚ğæ“¾iƒXƒP[ƒŠƒ“ƒOˆöqj
         float maxAbs = 0f;
         for (int i = 0; i < source.Length; i++)
         {
             float a = Math.Abs(source[i]);
             if (a > maxAbs) maxAbs = a;
         }
-        // ‘S‚Ä0‚È‚ç—Êq‰»•s—v
-        if (maxAbs == 0f) { maxAbs = 1e-8f; }
+        if (maxAbs == 0f) maxAbs = 1e-8f;
 
         scale = maxAbs / 127f;
         quantized = new byte[dimension];
@@ -77,14 +78,11 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
         for (int i = 0; i < source.Length; i++)
         {
             float q = source[i] / scale;
-            // ƒNƒŠƒbƒv
-            if (q > 127f) q = 127f;
-            else if (q < -127f) q = -127f;
-            sbyte sb = (sbyte)Math.Round(q);
+            q = Mathf.Clamp(q, -127f, 127f);
+            sbyte sb = (sbyte)Mathf.Round(q);
             unchecked { quantized[i] = (byte)sb; }
         }
 
-        // ƒLƒƒƒbƒVƒ…‚à—pˆÓ‚µ‚Ä‚¨‚­i’¼Œã‚Ég‚¤ƒP[ƒXÅ“K‰»j
         cache = new float[dimension];
         for (int i = 0; i < dimension; i++)
         {
@@ -94,31 +92,8 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
         }
     }
 
-    #region Word2VecZp‰‰Z—p‚Ìƒ†[ƒeƒBƒŠƒeƒB
-    /*
-    Word2Vec“¤’m¯`ŠeZp‰‰Z‚Å‰½‚ª‹N‚«‚é‚©`
+    #region ãƒ¦ãƒ¼ãƒ†ã‚£ãƒªãƒ†ã‚£
 
-    ‰Ád˜ai•½‹ÏjF•¡”‚ÌƒxƒNƒgƒ‹‚ÌdSi’†S“_j‚ğˆÚ“®‚³‚¹‚éB
-        ‚Â‚Ü‚èAu‚İ‚ñ‚È‚Ì’†ŠÔ“_v‚ÉˆÚ“®‚·‚éB
-        i—á‚PFuŒ¢v‚Æu”Lv‚Ì•½‹Ï ¨ uƒyƒbƒgv•ûŒü‚É‹ß‚Ã‚­j
-        i—á‚QF0.8~u¡“ú‚Í°‚êv{0.2~u‘ÌˆçÕ‚ªn‚Ü‚év ¨ u“V‹C‚Ì˜b‚ª’†Svj
-    “àÏF—Ş—“x‚ğ‘ª‚éB‘å‚«‚¢‚Ù‚Ç—‚Ä‚¢‚éB
-        i—á‚PFu°‚êv‚Æu‰õ°v¨ “àÏ‚ª‘å‚«‚¢i•ûŒü‚ª‹ß‚¢jj
-        i—á‚QFu°‚êv‚Æu‰Jv¨ “àÏ‚ª¬‚³‚¢i•ûŒü‚ª‰“‚¢jj
-    ³‹K‰»(ƒRƒTƒCƒ“—Ş—“x)FuˆÓ–¡‚Ì•ûŒüv‚¾‚¯‚ğƒˆ‚ÉŒ©‚éBoŒ»•p“x‚â‹­‚³‚Ì‰e‹¿‚ğæ‚èœ‚­B
-        i—á‚PFu°‚êv(‚æ‚­o‚é’PŒê‚Å’·‚¢ƒxƒNƒgƒ‹)j
-        i—á‚QFu“Ü“Vv(’¿‚µ‚¢’PŒê‚Å’Z‚¢ƒxƒNƒgƒ‹)j
-        ¨³‹K‰»‚·‚é‚Æ—¼•û‚Æ‚àg“V‹Ch•ûŒü‚Ìƒˆ‚ÈˆÓ–¡‚Æ‚µ‚Ä”äŠr‰Â”\B
-        ¦ƒRƒTƒCƒ“—Ş—“x‚Í³‹K‰»Œã‚Ì“àÏB
-    Œ¸ZFuA‚©‚çB‚ğˆø‚­v¨uA‚É‚ ‚Á‚ÄB‚É‚È‚¢‚à‚Ìv‚ğ‹­’²‚·‚éB
-        i—á‚PFu‰¤—lv-u’jv+u—v¨u—‰¤—lvj
-        i—á‚QFu”Lv-uƒyƒbƒgv+uŒ¢v¨uŒ¢vj
-    ƒXƒJƒ‰[”{FƒxƒNƒgƒ‹‚Ìu‹­‚³v‚ğ•Ï‚¦‚éB
-        i—á‚PF2”{ ¨ d—v“x‚ª‘‚·i³‹K‰»‘O‚É‚â‚é‚Æ‰e‹¿‘åjj
-        i—á‚QF-1”{ ¨ ˆÓ–¡‚ª”½“]‚·‚éiˆÓ–¡“I‚È‘Î‹`Œê‚Æ’¼Ú‘ŠŠÖ‚ª‚ ‚é‚í‚¯‚Å‚Í‚È‚¢“_‚É’ˆÓjj
-     */
-
-    /// <summary>ƒfƒB[ƒvƒRƒs[i—Êq‰»ƒoƒbƒtƒ@‚ğ•¡»j</summary>
     public SerializableEmbedding Clone()
     {
         var copy = new SerializableEmbedding(model);
@@ -130,11 +105,11 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
         }
         copy.scale = scale;
         copy.dimension = dimension;
-        copy.cache = null; // ’x‰„•œŒ³
+        copy.cache = cache != null ? (float[])cache.Clone() : null;
         return copy;
     }
 
-    /// <summary>float”z—ñ‚ÌV‹KEmbedding‚ğì‚éƒwƒ‹ƒp</summary>
+    /// <summary>floaté…åˆ—ã®æ–°è¦Embeddingã‚’ä½œã‚‹ãƒ˜ãƒ«ãƒ‘</summary>
     public static SerializableEmbedding FromFloatArray(float[] src, string modelName)
     {
         var e = new SerializableEmbedding(modelName);
@@ -142,90 +117,130 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
         return e;
     }
 
-    /// <summary>“¯ŸŒ³ƒ`ƒFƒbƒNBˆá‚¦‚Î—áŠOB</summary>
-    private void EnsureSameDim(SerializableEmbedding b)
+    /// <summary>åŒæ¬¡å…ƒãƒã‚§ãƒƒã‚¯ã€‚é•ãˆã°ä¾‹å¤–ã€‚</summary>
+    private void EnsureSameDim(SerializableEmbedding other)
     {
-        if (b == null) throw new ArgumentNullException("Embedding is null.");
-        if (dimension <= 0 || b.dimension <= 0 || dimension != b.dimension)
+        if (other == null) throw new ArgumentNullException(nameof(other));
+        if (dimension <= 0 || other.dimension <= 0 || dimension != other.dimension)
             throw new ArgumentException("Embeddings must have the same positive dimension.");
     }
 
-    /// <summary>—v‘f‚²‚Æ‚Ì‰ÁZiV‹KƒCƒ“ƒXƒ^ƒ“ƒXjB</summary>
-    public SerializableEmbedding Add(SerializableEmbedding b)
+    private string GetResultModel(SerializableEmbedding other)
     {
-        EnsureSameDim(b);
+        if (!string.IsNullOrEmpty(model)) return model;
+        return other?.Model ?? string.Empty;
+    }
+
+    #endregion
+
+    #region ãƒ™ã‚¯ãƒˆãƒ«æ¼”ç®—
+
+    public SerializableEmbedding Add(SerializableEmbedding other)
+    {
+        EnsureSameDim(other);
         var va = ToFloatArray();
-        var vb = b.ToFloatArray();
+        var vb = other.ToFloatArray();
         var dst = new float[va.Length];
         for (int i = 0; i < dst.Length; i++) dst[i] = va[i] + vb[i];
-        return FromFloatArray(dst,Model);
+        return FromFloatArray(dst, GetResultModel(other));
     }
 
-    /// <summary>—v‘f‚²‚Æ‚ÌŒ¸ZiV‹KƒCƒ“ƒXƒ^ƒ“ƒXjB</summary>
-    public SerializableEmbedding Sub(SerializableEmbedding b)
+    public SerializableEmbedding Sub(SerializableEmbedding other)
     {
-        EnsureSameDim(b);
+        EnsureSameDim(other);
         var va = ToFloatArray();
-        var vb = b.ToFloatArray();
+        var vb = other.ToFloatArray();
         var dst = new float[va.Length];
         for (int i = 0; i < dst.Length; i++) dst[i] = va[i] - vb[i];
-        return FromFloatArray(dst, Model);
+        return FromFloatArray(dst, GetResultModel(other));
     }
 
-    /// <summary>ƒXƒJƒ‰[”{iV‹KƒCƒ“ƒXƒ^ƒ“ƒXjB</summary>
-    public SerializableEmbedding Scale(float s)
+    /// <summary>å„æ¬¡å…ƒã”ã¨ã®ç©ã‚’è¨ˆç®—ã™ã‚‹ Hadamard ç©ã€‚</summary>
+    public SerializableEmbedding HadamardProduct(SerializableEmbedding other)
+    {
+        EnsureSameDim(other);
+        var va = ToFloatArray();
+        var vb = other.ToFloatArray();
+        var dst = new float[va.Length];
+        for (int i = 0; i < dst.Length; i++) dst[i] = va[i] * vb[i];
+        return FromFloatArray(dst, GetResultModel(other));
+    }
+
+    /// <summary>å„æ¬¡å…ƒã”ã¨ã®é™¤ç®—ã‚’è¡Œã† Hadamard é™¤ç®—ã€‚åˆ†æ¯ãŒ 0 ã«è¿‘ã„å ´åˆã¯ epsilon ã§ã‚¯ãƒ©ãƒ³ãƒ—ã™ã‚‹ã€‚</summary>
+    public SerializableEmbedding HadamardQuotient(SerializableEmbedding other, float epsilon = 1e-8f)
+    {
+        if (epsilon <= 0f) throw new ArgumentOutOfRangeException(nameof(epsilon), "epsilon must be positive.");
+        EnsureSameDim(other);
+        var va = ToFloatArray();
+        var vb = other.ToFloatArray();
+        var dst = new float[va.Length];
+        for (int i = 0; i < dst.Length; i++)
+        {
+            var denom = vb[i];
+            if (Mathf.Abs(denom) < epsilon)
+            {
+                denom = denom >= 0f ? epsilon : -epsilon;
+            }
+            dst[i] = va[i] / denom;
+        }
+        return FromFloatArray(dst, GetResultModel(other));
+    }
+
+    public SerializableEmbedding Scale(float scalar)
     {
         if (dimension <= 0) return Clone();
         var va = ToFloatArray();
         var dst = new float[va.Length];
-        for (int i = 0; i < dst.Length; i++) dst[i] = va[i] * s;
-        return FromFloatArray(dst, Model);
+        for (int i = 0; i < dst.Length; i++) dst[i] = va[i] * scalar;
+        return FromFloatArray(dst, model);
     }
 
-    /// <summary>³‹K‰»ƒxƒNƒgƒ‹iV‹KƒCƒ“ƒXƒ^ƒ“ƒXjB©g‚Í•ÏX‚µ‚È‚¢B</summary>
+    /// <summary>æ­£è¦åŒ–ãƒ™ã‚¯ãƒˆãƒ«ï¼ˆæ–°è¦ã‚¤ãƒ³ã‚¹ã‚¿ãƒ³ã‚¹ï¼‰ã€‚è‡ªèº«ã¯å¤‰æ›´ã—ãªã„ã€‚</summary>
     public SerializableEmbedding Normalized()
     {
         if (dimension <= 0) return Clone();
         var v = ToFloatArray();
-        double n2 = 0d; for (int i = 0; i < v.Length; i++) n2 += v[i] * v[i];
+        double n2 = 0d;
+        for (int i = 0; i < v.Length; i++) n2 += v[i] * v[i];
         double n = Math.Sqrt(n2);
         if (n <= 0d) return Clone();
         var dst = new float[v.Length];
         float inv = (float)(1.0 / n);
         for (int i = 0; i < v.Length; i++) dst[i] = v[i] * inv;
-        return FromFloatArray(dst,Model);
+        return FromFloatArray(dst, model);
     }
 
-    /// <summary>©g‚ğ³‹K‰»‚µ‚Äã‘‚«i—Êq‰»‚àXVjB</summary>
+    /// <summary>è‡ªèº«ã‚’æ­£è¦åŒ–ã—ã¦ä¸Šæ›¸ãï¼ˆé‡å­åŒ–ã‚‚æ›´æ–°ï¼‰ã€‚</summary>
     public void NormalizeInPlace()
     {
         if (dimension <= 0) return;
         var v = ToFloatArray();
-        double n2 = 0d; for (int i = 0; i < v.Length; i++) n2 += v[i] * v[i];
+        double n2 = 0d;
+        for (int i = 0; i < v.Length; i++) n2 += v[i] * v[i];
         double n = Math.Sqrt(n2);
         if (n <= 0d) return;
         float inv = (float)(1.0 / n);
         for (int i = 0; i < v.Length; i++) v[i] *= inv;
-        SetFromFloatArray(v); // Ä—Êq‰»‚µ‚Ä•Û‘¶
+        SetFromFloatArray(v);
     }
 
-    /// <summary>“àÏ</summary>
+    /// <summary>å†…ç©</summary>
     public float Dot(SerializableEmbedding b)
     {
-        EnsureSameDim(b);
+        EnsureSameDim(other);
         var va = ToFloatArray();
-        var vb = b.ToFloatArray();
+        var vb = other.ToFloatArray();
         double sum = 0d;
         for (int i = 0; i < va.Length; i++) sum += va[i] * vb[i];
         return (float)sum;
     }
 
-    /// <summary>ƒRƒTƒCƒ“—Ş—“xi0œZ‚Í0jB</summary>
+    /// <summary>ã‚³ã‚µã‚¤ãƒ³é¡ä¼¼åº¦ï¼ˆ0é™¤ç®—ã¯0ï¼‰ã€‚</summary>
     public float CosineSimilarity(SerializableEmbedding b)
     {
-        EnsureSameDim(b);
+        EnsureSameDim(other);
         var va = ToFloatArray();
-        var vb = b.ToFloatArray();
+        var vb = other.ToFloatArray();
         double dot = 0d, na = 0d, nb = 0d;
         for (int i = 0; i < va.Length; i++)
         {
@@ -240,62 +255,42 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
         return (float)(dot / denom);
     }
 
-    /// <summary>•½‹Ïi‹ó‚â null ‚ğœŠOjB³‹K‰»‚µ‚½•½‹Ï‚É‚µ‚½‚¢ê‡‚Í normalize=trueB</summary>
+    #endregion
+
+    #region Aggregation helpers
+
     public static SerializableEmbedding Average(IList<SerializableEmbedding> list, bool normalize)
     {
         if (list == null || list.Count == 0) return null;
 
-        // Å‰‚Ì—LŒøŸŒ³‚ğ’T‚·
-        int dim = -1;
-        for (int i = 0; i < list.Count; i++)
-        {
-            var e = list[i];
-            if (e != null && e.dimension > 0) { dim = e.dimension; break; }
-        }
+        int dim = FindFirstValidDimension(list);
         if (dim <= 0) return null;
 
         var sum = new float[dim];
-        int cnt = 0;
+        int count = 0;
 
-        for (int i = 0; i < list.Count; i++)
+        foreach (var e in list)
         {
-            var e = list[i];
             if (e == null || e.dimension != dim) continue;
             var v = e.ToFloatArray();
             for (int k = 0; k < dim; k++) sum[k] += v[k];
-            cnt++;
+            count++;
         }
-        if (cnt == 0) return null;
+        if (count == 0) return null;
 
-        float inv = 1f / cnt;
+        float inv = 1f / count;
         for (int k = 0; k < dim; k++) sum[k] *= inv;
 
-        if (normalize)
-        {
-            double n2 = 0d; for (int k = 0; k < dim; k++) n2 += sum[k] * sum[k];
-            double n = Math.Sqrt(n2);
-            if (n > 0d)
-            {
-                float invn = (float)(1.0 / n);
-                for (int k = 0; k < dim; k++) sum[k] *= invn;
-            }
-        }
+        if (normalize) NormalizeVector(sum);
 
         return FromFloatArray(sum, list[0].Model);
     }
 
-    /// <summary>‰Ád˜aiweights.Count == list.Count ‚ğ‘z’èjB•K—v‚È‚ç³‹K‰»B</summary>
     public static SerializableEmbedding WeightedSum(IList<SerializableEmbedding> list, IList<float> weights, bool normalize)
     {
         if (list == null || weights == null || list.Count == 0 || list.Count != weights.Count) return null;
 
-        // ŸŒ³Œˆ’è
-        int dim = -1;
-        for (int i = 0; i < list.Count; i++)
-        {
-            var e = list[i];
-            if (e != null && e.dimension > 0) { dim = e.dimension; break; }
-        }
+        int dim = FindFirstValidDimension(list);
         if (dim <= 0) return null;
 
         var sum = new float[dim];
@@ -308,48 +303,70 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
             for (int k = 0; k < dim; k++) sum[k] += v[k] * w;
         }
 
-        if (normalize)
-        {
-            double n2 = 0d; for (int k = 0; k < dim; k++) n2 += sum[k] * sum[k];
-            double n = Math.Sqrt(n2);
-            if (n > 0d)
-            {
-                float invn = (float)(1.0 / n);
-                for (int k = 0; k < dim; k++) sum[k] *= invn;
-            }
-        }
+        if (normalize) NormalizeVector(sum);
 
         return FromFloatArray(sum, list[0].Model);
     }
+
+    private static int FindFirstValidDimension(IEnumerable<SerializableEmbedding> list)
+    {
+        foreach (var e in list)
+        {
+            if (e != null && e.dimension > 0) return e.dimension;
+        }
+        return -1;
+    }
+
+    private static void NormalizeVector(float[] vec)
+    {
+        double n2 = 0d;
+        for (int i = 0; i < vec.Length; i++) n2 += vec[i] * vec[i];
+        double n = Math.Sqrt(n2);
+        if (n > 0d)
+        {
+            float inv = (float)(1.0 / n);
+            for (int i = 0; i < vec.Length; i++) vec[i] *= inv;
+        }
+    }
+
     #endregion
 
-    #region ‰‰ZqƒI[ƒo[ƒ[ƒh
-    public static SerializableEmbedding operator +(SerializableEmbedding a, SerializableEmbedding b) { return a.Add(b); }
-    public static SerializableEmbedding operator -(SerializableEmbedding a, SerializableEmbedding b) { return a.Sub(b); }
+    #region Operators
+
+    public static SerializableEmbedding operator +(SerializableEmbedding a, SerializableEmbedding b) => a.Add(b);
+    public static SerializableEmbedding operator -(SerializableEmbedding a, SerializableEmbedding b) => a.Sub(b);
+
     public static SerializableEmbedding operator -(SerializableEmbedding a)
     {
-        if (a == null) throw new ArgumentNullException("Embedding is null.");
+        if (a == null) throw new ArgumentNullException(nameof(a));
         if (a.dimension <= 0) return a.Clone();
         var v = a.ToFloatArray();
         var dst = new float[v.Length];
         for (int i = 0; i < dst.Length; i++) dst[i] = -v[i];
         return FromFloatArray(dst, a.Model);
     }
-    public static SerializableEmbedding operator *(SerializableEmbedding a, float s) { return a.Scale(s); }
-    public static SerializableEmbedding operator *(float s, SerializableEmbedding a) { return a.Scale(s); }
+
+    public static SerializableEmbedding operator *(SerializableEmbedding a, float s) => a.Scale(s);
+    public static SerializableEmbedding operator *(float s, SerializableEmbedding a) => a.Scale(s);
+
     public static SerializableEmbedding operator /(SerializableEmbedding a, float s)
     {
         if (s == 0f) throw new DivideByZeroException();
         return a.Scale(1f / s);
     }
+
     #endregion
 
+    #region Serialization callback
 
-    // JSON/Binary ƒVƒŠƒAƒ‰ƒCƒY‘OŒã‚Å‚ÌƒtƒbƒNi‚±‚±‚Å‚Í‰½‚à‚µ‚È‚¢‚ª–¾¦“I‚Éc‚·j
+    // JSON/Binary ã‚·ãƒªã‚¢ãƒ©ã‚¤ã‚ºå‰å¾Œã§ã®ãƒ•ãƒƒã‚¯ï¼ˆã“ã“ã§ã¯ä½•ã‚‚ã—ãªã„ãŒæ˜ç¤ºçš„ã«æ®‹ã™ï¼‰
     public void OnBeforeSerialize() { }
+
     public void OnAfterDeserialize()
     {
-        // ƒ[ƒh’¼Œã‚Í–¢•œŒ³ó‘Ôi•K—v‚É ToFloatArray ‚Å•œŒ³j
+        // ãƒ­ãƒ¼ãƒ‰ç›´å¾Œã¯æœªå¾©å…ƒçŠ¶æ…‹ï¼ˆå¿…è¦æ™‚ã« ToFloatArray ã§å¾©å…ƒï¼‰
         cache = null;
     }
+
+    #endregion
 }
