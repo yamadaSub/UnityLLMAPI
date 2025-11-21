@@ -14,7 +14,9 @@ public enum EmmbeddingModelType
 {
     OpenAISmall,
     OpenAILarge,
-    Gemini01
+    Gemini01,
+    Gemini01_1536,
+    Gemini01_768
 }
 #endregion
 
@@ -40,7 +42,11 @@ public static class EmbeddingManager
         switch (model)
         {
             case EmmbeddingModelType.Gemini01:
-                return await CreateGeminiEmbeddingAsync(text);
+                return await CreateGeminiEmbeddingAsync(text, null);
+            case EmmbeddingModelType.Gemini01_1536:
+                return await CreateGeminiEmbeddingAsync(text, 1536);
+            case EmmbeddingModelType.Gemini01_768:
+                return await CreateGeminiEmbeddingAsync(text, 768);
             case EmmbeddingModelType.OpenAILarge:
                 return await CreateEmbeddingAsyncOpenAI(text, "text-embedding-3-large");
             case EmmbeddingModelType.OpenAISmall:
@@ -150,7 +156,7 @@ public static class EmbeddingManager
     /// <summary>
     /// Gemini Embeddings API を呼び出す。
     /// </summary>
-    private static async Task<SerializableEmbedding> CreateGeminiEmbeddingAsync(string text)
+    private static async Task<SerializableEmbedding> CreateGeminiEmbeddingAsync(string text, int? outputDimensionality)
     {
         if (string.IsNullOrEmpty(text))
             throw new ArgumentException("text is null or empty.");
@@ -167,6 +173,10 @@ public static class EmbeddingManager
                 { "parts", new[]{ new Dictionary<string, string>{{ "text", text }} } }
             }}
         };
+        if (outputDimensionality.HasValue)
+        {
+            body["outputDimensionality"] = outputDimensionality.Value;
+        }
 
         string jsonBody = JsonConvert.SerializeObject(body);
         using var req = new UnityWebRequest(geminiEmbeddingsEndpoint, "POST")

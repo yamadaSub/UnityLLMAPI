@@ -1,4 +1,4 @@
-﻿UnityLLMAPI
+UnityLLMAPI
 ===========
 
 Unity から大手 LLM / Embedding API を呼び出すための支援パッケージです。  
@@ -82,7 +82,9 @@ var images = await AIManager.GenerateImagesAsync(editMessages);
 
 ### 5. 埋め込みベクトル
 ```csharp
-var embedding = await EmbeddingManager.CreateEmbeddingAsync("Unity loves C#");
+var embedding = await EmbeddingManager.CreateEmbeddingAsync(
+    "Unity loves C#",
+    EmmbeddingModelType.Gemini01_1536); // Gemini 01 の出力次元を 1,536 に指定
 var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpusEmbeddings);
 ```
 
@@ -118,7 +120,8 @@ API リファレンス（抜粋）
 - `GenerateImagesAsync` / `GenerateImageAsync`：Gemini 画像生成
 
 ### EmbeddingManager
-- `CreateEmbeddingAsync(string text, EmmbeddingModelType model)`：OpenAI / Gemini の埋め込みを取得
+- `CreateEmbeddingAsync(string text, EmmbeddingModelType model = EmmbeddingModelType.Gemini01)`：OpenAI / Gemini の埋め込みを取得（Gemini 01 はモデル種別で次元数を選択）
+- `EmmbeddingModelType.Gemini01 / Gemini01_1536 / Gemini01_768`：Gemini Embedding 001 の出力次元オプション
 - `RankByCosine`：複数の埋め込みに対してコサイン類似度でランク付け
 
 ---

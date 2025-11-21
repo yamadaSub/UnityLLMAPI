@@ -35,3 +35,4 @@ public class AIManagerBehaviour : MonoBehaviour
         AIManager.UnregisterBehaviour(this);
     }
 }
+
