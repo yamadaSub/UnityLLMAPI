@@ -1,8 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.ComponentModel;
 using UnityEngine;
+using UnityLLMAPI.Chat;
+using UnityLLMAPI.Schema;
 
 /// <summary>
 /// AIManager の代表的な機能（通常チャット、構造化レスポンス、RealTime Schema、Function Calling）をまとめたサンプル。

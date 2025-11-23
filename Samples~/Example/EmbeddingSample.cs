@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityLLMAPI.Embedding;
 
 /// <summary>
 /// EmbeddingManager を用いたベクトル演算と類似度計算、Hadamard 演算のサンプル。
@@ -11,25 +12,21 @@ public class EmbeddingSample : MonoBehaviour
     {
         var projected768 = await EmbeddingManager.CreateEmbeddingAsync(
             "example text for 768-dim projection",
-            EmmbeddingModelType.Gemini01_768);
+            EmbeddingModelType.Gemini01_768);
         Debug.Log($"[EmbeddingSample] Gemini embedding (dim=768) length: {projected768?.Dimension}");
 
         // 線形演算後に正規化してコサイン類似度に備える
-        var king = await EmbeddingManager.CreateEmbeddingAsync("king", EmmbeddingModelType.Gemini01_768);
-        var man = await EmbeddingManager.CreateEmbeddingAsync("man", EmmbeddingModelType.Gemini01_768);
-        var woman = await EmbeddingManager.CreateEmbeddingAsync("woman", EmmbeddingModelType.Gemini01_768);
+        var king = await EmbeddingManager.CreateEmbeddingAsync("king", EmbeddingModelType.Gemini01_768);
+        var man = await EmbeddingManager.CreateEmbeddingAsync("man", EmbeddingModelType.Gemini01_768);
+        var woman = await EmbeddingManager.CreateEmbeddingAsync("woman", EmbeddingModelType.Gemini01_768);
 
         // 線形演算後に正規化してコサイン類似度に備える
         var query = (king - man + woman).Normalized();
 
         var corpusWords = new List<string> { "queen", "king", "woman", "man" };
-        var corpus = new List<SerializableEmbedding>();
-        foreach (var word in corpusWords)
-        {
-            corpus.Add(await EmbeddingManager.CreateEmbeddingAsync(word, EmmbeddingModelType.Gemini01_768));
-        }
+        var corpus = await EmbeddingManager.CreateEmbeddingsAsync(corpusWords, EmbeddingModelType.Gemini01_768);
 
-        Debug.Log("[EmbeddingSample] 類似度計算 (Cosine) - Optimized with Magnitude Cache");
+        Debug.Log("[EmbeddingSample] 類似度計算(Cosine) - Optimized with Magnitude Cache");
         var ranked = EmbeddingManager.RankByCosine(query, corpus, topK: -1);
         for (int i = 0; i < ranked.Count; i++)
         {

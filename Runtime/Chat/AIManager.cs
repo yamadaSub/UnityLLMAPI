@@ -5,12 +5,18 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using System.Threading.Tasks; 
+using System.Threading.Tasks;
+using System.Threading;
+using UnityLLMAPI.Common;
+using UnityLLMAPI.Schema;
+
+namespace UnityLLMAPI.Chat
+{
 
 #region 共通クラス・Enum
 
 /// <summary>
-/// サポートするモデル：GPT と Grok のみ
+/// サポートするモデル
 /// </summary>
 public enum AIModelType
 {
@@ -72,7 +78,6 @@ public class Message
 }
 
 #endregion
-
 #region Message Parts
 
 public enum MessageContentType
@@ -164,7 +169,6 @@ public class ImageGenerationResponse
 #endregion
 
 #endregion
-
 #region Function 呼び出し関連
 
 public class FunctionSchema<T> : RealTimeJsonSchema<T> where T : SchemaParameter
@@ -656,7 +660,7 @@ public static class AIManager
     /// 会話履歴（Message のリスト）を送信し、テキスト応答を非同期に取得します。
     /// エラー時は null を返します。
     /// </summary>
-    public static async Task<string> SendMessageAsync(List<Message> messages, AIModelType model, Dictionary<string, object> initBody=null)
+    public static async Task<string> SendMessageAsync(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null, CancellationToken cancellationToken = default, int timeoutSeconds = -1)
     {
         if (model == AIModelType.Gemini25FlashImagePreview || model == AIModelType.Gemini3ProImagePreview)
         {
@@ -667,7 +671,7 @@ public static class AIManager
         if (IsGeminiModel(model))
         {
             var modelNameGemini = GetModelName(model);
-            return await SendMessageAsyncGemini(messages, modelNameGemini, initBody);
+            return await SendMessageAsyncGemini(messages, modelNameGemini, initBody, cancellationToken, timeoutSeconds);
         }
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
         if (string.IsNullOrEmpty(apiKey))
@@ -700,7 +704,7 @@ public static class AIManager
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Authorization", "Bearer " + apiKey);
 
-            await UnityWebRequestUtils.SendAsync(request);
+            await UnityWebRequestUtils.SendAsync(request, cancellationToken, timeoutSeconds);
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -736,7 +740,7 @@ public static class AIManager
         }
     }
 
-    private static async Task<string> SendMessageAsyncGemini(List<Message> messages, string modelName, Dictionary<string, object> initBody)
+    private static async Task<string> SendMessageAsyncGemini(List<Message> messages, string modelName, Dictionary<string, object> initBody, CancellationToken cancellationToken, int timeoutSeconds)
     {
         var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
         if (string.IsNullOrEmpty(apiKey))
@@ -762,7 +766,7 @@ public static class AIManager
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("x-goog-api-key", apiKey);
 
-            await UnityWebRequestUtils.SendAsync(req);
+            await UnityWebRequestUtils.SendAsync(req, cancellationToken, timeoutSeconds);
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"Gemini Error: {req.error} \n{req.downloadHandler?.text}");
@@ -794,7 +798,9 @@ public static class AIManager
     public static async Task<ImageGenerationResponse> GenerateImagesAsync(
         List<Message> messages,
         AIModelType model = AIModelType.Gemini25FlashImagePreview,
-        Dictionary<string, object> initBody = null)
+        Dictionary<string, object> initBody = null,
+        CancellationToken cancellationToken = default,
+        int timeoutSeconds = -1)
     {
         if (model != AIModelType.Gemini25FlashImagePreview && model != AIModelType.Gemini3ProImagePreview)
         {
@@ -849,7 +855,7 @@ public static class AIManager
         req.SetRequestHeader("Content-Type", "application/json");
         req.SetRequestHeader("x-goog-api-key", apiKey);
 
-        await UnityWebRequestUtils.SendAsync(req);
+        await UnityWebRequestUtils.SendAsync(req, cancellationToken, timeoutSeconds);
         if (req.result != UnityWebRequest.Result.Success)
         {
             Debug.LogError($"Gemini image generation error: {req.error}\n{req.downloadHandler?.text}");
@@ -939,9 +945,11 @@ public static class AIManager
     public static async Task<GeneratedImage> GenerateImageAsync(
         List<Message> messages,
         AIModelType model = AIModelType.Gemini25FlashImagePreview,
-        Dictionary<string, object> initBody = null)
+        Dictionary<string, object> initBody = null,
+        CancellationToken cancellationToken = default,
+        int timeoutSeconds = -1)
     {
-        var response = await GenerateImagesAsync(messages, model, initBody);
+        var response = await GenerateImagesAsync(messages, model, initBody, cancellationToken, timeoutSeconds);
         return response?.images?.FirstOrDefault();
     }
 
@@ -949,9 +957,9 @@ public static class AIManager
     /// 会話履歴を送信し、構造化出力モードで型パラメータ T に基づく応答を非同期に取得します。
     /// エラー時は default(T) を返します。
     /// </summary>
-    public static async Task<T> SendStructuredMessageAsync<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async Task<T> SendStructuredMessageAsync<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null, CancellationToken cancellationToken = default, int timeoutSeconds = -1)
     {
-        string content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody);
+        string content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody, cancellationToken, timeoutSeconds);
         if (string.IsNullOrEmpty(content))
         {
             return default;
@@ -960,14 +968,14 @@ public static class AIManager
         return structuredResult;
     }
 
-    public static async Task SendStructuredMessageAsync<T>(T targetInstance, List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async Task SendStructuredMessageAsync<T>(T targetInstance, List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null, CancellationToken cancellationToken = default, int timeoutSeconds = -1)
     {
         if (targetInstance == null)
         {
             throw new ArgumentNullException(nameof(targetInstance), "targetInstance cannot be null.");
         }
 
-        string content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody);
+        string content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody, cancellationToken, timeoutSeconds);
         if (!string.IsNullOrEmpty(content))
         {
             JsonConvert.PopulateObject(content, targetInstance);
@@ -977,12 +985,12 @@ public static class AIManager
     /// <summary>
     /// 会話履歴を送信し、構造化出力モードで型パラメータ T に基づく応答を非同期に取得します。
     /// </summary>
-    private static async Task<string> SendStructuredMessageAsyncCore<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null)
+    private static async Task<string> SendStructuredMessageAsyncCore<T>(List<Message> messages, AIModelType model, Dictionary<string, object> initBody = null, CancellationToken cancellationToken = default, int timeoutSeconds = -1)
     {
         if (IsGeminiModel(model))
         {
             var modelNameGemini = GetModelName(model);
-            return await SendStructuredMessageAsyncCoreGemini<T>(messages, modelNameGemini, initBody);
+            return await SendStructuredMessageAsyncCoreGemini<T>(messages, modelNameGemini, initBody, cancellationToken, timeoutSeconds);
         }
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
         if (string.IsNullOrEmpty(apiKey))
@@ -1023,7 +1031,7 @@ public static class AIManager
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Authorization", "Bearer " + apiKey);
 
-            await UnityWebRequestUtils.SendAsync(request);
+            await UnityWebRequestUtils.SendAsync(request, cancellationToken, timeoutSeconds);
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -1059,7 +1067,7 @@ public static class AIManager
         }
     }
 
-    private static async Task<string> SendStructuredMessageAsyncCoreGemini<T>(List<Message> messages, string modelName, Dictionary<string, object> initBody)
+    private static async Task<string> SendStructuredMessageAsyncCoreGemini<T>(List<Message> messages, string modelName, Dictionary<string, object> initBody, CancellationToken cancellationToken, int timeoutSeconds)
     {
         var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
         if (string.IsNullOrEmpty(apiKey))
@@ -1097,7 +1105,7 @@ public static class AIManager
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("x-goog-api-key", apiKey);
 
-            await UnityWebRequestUtils.SendAsync(req);
+            await UnityWebRequestUtils.SendAsync(req, cancellationToken, timeoutSeconds);
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"Gemini (structured) Error: {req.error} \n{req.downloadHandler?.text}");
@@ -1125,15 +1133,15 @@ public static class AIManager
     /// 各パラメータの値を schema.Parameters の Value に設定して返します。
     /// エラー時は null を返します。
     /// </summary>
-    public static async Task<IJsonSchema> SendStructuredMessageWithRealTimeSchemaAsync(List<Message> messages, IJsonSchema schema, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async Task<IJsonSchema> SendStructuredMessageWithRealTimeSchemaAsync(List<Message> messages, IJsonSchema schema, AIModelType model, Dictionary<string, object> initBody = null, CancellationToken cancellationToken = default, int timeoutSeconds = -1)
     {
         // RealTimeJsonSchema から JSON Schema を生成
         var jsonSchema = schema.GenerateJsonSchema();
-        var valuesDict = await SendStructuredMessageWithSchemaAsync(messages,jsonSchema,model, initBody);
+        var valuesDict = await SendStructuredMessageWithSchemaAsync(messages,jsonSchema,model, initBody, cancellationToken, timeoutSeconds);
         if(valuesDict != null)
         {
             var result = schema.Clone() as IJsonSchema;
-            result.PerseValueDict(valuesDict);
+            result.ParseValueDict(valuesDict);
             return result;
         }
         return null;
@@ -1142,7 +1150,7 @@ public static class AIManager
     /// <summary>
     /// JsonSchemaを直接介して構造化出力
     /// </summary>
-    public static async Task<Dictionary<string, object>> SendStructuredMessageWithSchemaAsync(List<Message> messages, Dictionary<string, object> jsonSchema, AIModelType model, Dictionary<string, object> initBody = null)
+    public static async Task<Dictionary<string, object>> SendStructuredMessageWithSchemaAsync(List<Message> messages, Dictionary<string, object> jsonSchema, AIModelType model, Dictionary<string, object> initBody = null, CancellationToken cancellationToken = default, int timeoutSeconds = -1)
     {
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
         string modelName = GetModelName(model);
@@ -1175,7 +1183,7 @@ public static class AIManager
             request.SetRequestHeader("Content-Type", "application/json");
             request.SetRequestHeader("Authorization", "Bearer " + apiKey);
 
-            await UnityWebRequestUtils.SendAsync(request);
+            await UnityWebRequestUtils.SendAsync(request, cancellationToken, timeoutSeconds);
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -1220,12 +1228,14 @@ public static class AIManager
             List<Message> messages,
             List<IJsonSchema> functions,
             AIModelType model,
-            Dictionary<string, object> initBody = null)
+            Dictionary<string, object> initBody = null,
+            CancellationToken cancellationToken = default,
+            int timeoutSeconds = -1)
     {
         if (IsGeminiModel(model))
         {
             var modelNameGemini = GetModelName(model);
-            return await SendFunctionCallMessageAsyncGemini(messages, functions, modelNameGemini, initBody);
+            return await SendFunctionCallMessageAsyncGemini(messages, functions, modelNameGemini, initBody, cancellationToken, timeoutSeconds);
         }
         var (endpoint, apiKey) = GetEndpointAndApiKey(model);
         if (string.IsNullOrEmpty(apiKey))
@@ -1257,7 +1267,7 @@ public static class AIManager
         request.SetRequestHeader("Content-Type", "application/json");
         request.SetRequestHeader("Authorization", "Bearer " + apiKey);
 
-        await UnityWebRequestUtils.SendAsync(request);
+        await UnityWebRequestUtils.SendAsync(request, cancellationToken, timeoutSeconds);
 
         if (request.result != UnityWebRequest.Result.Success)
         {
@@ -1281,7 +1291,7 @@ public static class AIManager
                       ?? new Dictionary<string, object>();
 
         // RealTimeJsonSchema で型を補正
-        target.PerseValueDict(argDict);
+        target.ParseValueDict(argDict);
 
         // Execute & そのまま返す
         return target;
@@ -1292,7 +1302,9 @@ public static class AIManager
         List<Message> messages,
         List<IJsonSchema> functions,
         string modelName,
-        Dictionary<string, object> initBody)
+        Dictionary<string, object> initBody,
+        CancellationToken cancellationToken,
+        int timeoutSeconds)
     {
         var (_, apiKey) = GetEndpointAndApiKey(AIModelType.Gemini25);
         if (string.IsNullOrEmpty(apiKey))
@@ -1342,7 +1354,7 @@ public static class AIManager
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("x-goog-api-key", apiKey);
 
-            await UnityWebRequestUtils.SendAsync(req);
+            await UnityWebRequestUtils.SendAsync(req, cancellationToken, timeoutSeconds);
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"Gemini (function) Error: {req.error} \n{req.downloadHandler?.text}");
@@ -1370,7 +1382,7 @@ public static class AIManager
                             ? JsonConvert.DeserializeObject<Dictionary<string, object>>(fargs.ToString())
                             : new Dictionary<string, object>();
 
-                        target.PerseValueDict(dict);
+                        target.ParseValueDict(dict);
                         return target;
                     }
                 }
@@ -1420,3 +1432,4 @@ public static class AIManager
 
 #endregion
 
+}

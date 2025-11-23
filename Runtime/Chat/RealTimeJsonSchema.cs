@@ -1,292 +1,294 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using UnityEditor;
 using UnityEngine;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
-
-
-
-/// <summary>
-/// 各パラメータの定義および値を保持するクラスです。
-/// 値はすべて文字列で保持し、GetValue() で ParameterType に応じた型に変換します。
-/// </summary>
-[Serializable]
-public class SchemaParameter
+namespace UnityLLMAPI.Schema
 {
-    [Tooltip("パラメータ名（必須）")]
-    public string ParameterName;
-
-    [Tooltip("パラメータの説明")]
-    public string Description;
-
-    [Tooltip("パラメータの型")]
-    public SchemaParameterType ParameterType;
-
-    [Tooltip("パラメータの値（すべて文字列として入力してください）")]
-    [FlexibleInput("ParameterType")]
-    public string Value;
-
-    public bool Required = true;
-    public string[] Enum;
-
-    [Tooltip("最小値 (Numberのみ)")]
-    public double Min = double.NaN;
-    [Tooltip("最大値 (Numberのみ)")]
-    public double Max = double.NaN;
-    [Tooltip("正規表現パターン (Stringのみ)")]
-    public string Pattern;
-
     /// <summary>
-    /// ParameterType に合わせた型に変換した値を返します。
-    /// 変換に失敗した場合は、Number は 0、Boolean は false、DateTime は null を返します。
+    /// パラメーターの定義と値を保持するクラス。
+    /// 値はすべて文字列で保持し、GetValue() で ParameterType に応じた型に変換される。
     /// </summary>
-    public object GetValue()
+    [Serializable]
+    public class SchemaParameter
     {
-        switch (ParameterType)
+        [Tooltip("パラメーター名（必須）")]
+        public string ParameterName;
+
+        [Tooltip("パラメーターの説明")]
+        public string Description;
+
+        [Tooltip("パラメーターの型")]
+        public SchemaParameterType ParameterType;
+
+        [Tooltip("パラメーターの値（すべて文字列として入力してください）")]
+        [FlexibleInput("ParameterType")]
+        public string Value;
+
+        public bool Required = true;
+        public string[] Enum;
+
+        [Tooltip("最小値 (Numberの場合)")]
+        public double Min = double.NaN;
+        [Tooltip("最大値 (Numberの場合)")]
+        public double Max = double.NaN;
+        [Tooltip("制約するパターン (Stringの場合)")]
+        public string Pattern;
+
+        /// <summary>
+        /// ParameterType に応じた型に変換した値を返します。
+        /// 変換に失敗する場合は、Number は 0、Boolean は false、DateTime は null を返します。
+        /// </summary>
+        public object GetValue()
         {
-            case SchemaParameterType.String:
-                return Value;
-            case SchemaParameterType.Number:
-                if (float.TryParse(Value, out float num))
-                    return num;
-                return 0;
-            case SchemaParameterType.Boolean:
-                if (bool.TryParse(Value, out bool b))
-                    return b;
-                return false;
-            case SchemaParameterType.DateTime:
-                if (DateTime.TryParse(Value, out DateTime dt))
-                    return dt.ToString("o"); // ISO 8601 形式
-                return null;
-            case SchemaParameterType.None:
-                return null;
-            default:
-                return Value;
-        }
-    }
-
-    public Dictionary<string, object> ToJsonSchemaPiece()
-        => JsonSchemaGenerator.CreatePrimitiveSchema(
-            ParameterType, 
-            Description, 
-            Enum, 
-            double.IsNaN(Min) ? (double?)null : Min, 
-            double.IsNaN(Max) ? (double?)null : Max, 
-            Pattern);
-
-    public virtual string GenerateMarkDown(string description = null)
-    {
-        if (string.IsNullOrEmpty(ParameterName))
-            return null;
-        string result = ($"* {ParameterName} : {Value}");
-        if (ParameterType == SchemaParameterType.None)
-        {
-            result = ($"* {ParameterName}");
-        }
-        if (!string.IsNullOrEmpty(description))
-        {
-            result += ($"\n  * {description}");
-        }
-        else if (!string.IsNullOrEmpty(Description))
-        {
-            result +=($"\n  * {Description}");
-        }
-        return result;
-    }
-}
-
-
-public interface IJsonSchema:ICloneable
-{
-    public string Name { get; }
-    public Dictionary<string, object> GenerateJsonSchema();
-    public void PerseValueDict(Dictionary<string, object> dict);
-}
-
-/// <summary>
-/// スキーマ名と複数のパラメータ定義を保持し、
-/// そこから JSON Schema、値オブジェクト、そしてマークダウン形式の説明を自動生成するクラスです。
-/// </summary>
-[Serializable]
-public class RealTimeJsonSchema<T> :IJsonSchema where T : SchemaParameter
-{
-    [Tooltip("スキーマ名")]
-    public string Name { get; }
-
-    [Tooltip("パラメータ定義の配列")]
-    public T[] Parameters = new T[0];
-
-    public RealTimeJsonSchema(string name)
-    {
-        Name = name;
-    }
-
-    public virtual Dictionary<string, object> GenerateJsonSchema(Func<T, bool> filter = null)
-    {
-        var members = Parameters?
-            .Where(p => !string.IsNullOrEmpty(p.ParameterName) &&
-                        (filter == null || filter(p)))
-            .Select(p => (p.ParameterName, p.ToJsonSchemaPiece()))
-            .ToList() ?? new List<(string, Dictionary<string, object>)>();
-        return new Dictionary<string, object>{
-            { "name", Name },
-            { "schema", JsonSchemaGenerator.BuildObjectSchema(members)}
-        };
-    }
-
-    /// <summary>
-    /// 引数ナシ版
-    /// </summary>
-    /// <returns></returns>
-    public Dictionary<string, object> GenerateJsonSchema() => GenerateJsonSchema(null);
-
-    /// <summary>
-    /// 現在設定されている各パラメータの値を、パラメータ名をキーとした Dictionary として返します。
-    /// API への値渡しなどに利用できます。
-    /// </summary>
-    public Dictionary<string, object> GenerateValuesObject(Func<T, bool> filter = null)
-    {
-        Dictionary<string, object> values = new Dictionary<string, object>();
-        if (Parameters != null)
-        {
-            foreach (var param in Parameters)
+            switch (ParameterType)
             {
-                if (string.IsNullOrEmpty(param.ParameterName) || (filter != null && !filter(param)))
-                    continue;
-                values[param.ParameterName] = param.GetValue();
+                case SchemaParameterType.String:
+                    return Value;
+                case SchemaParameterType.Number:
+                    if (float.TryParse(Value, out float num))
+                        return num;
+                    return 0;
+                case SchemaParameterType.Boolean:
+                    if (bool.TryParse(Value, out bool b))
+                        return b;
+                    return false;
+                case SchemaParameterType.DateTime:
+                    if (DateTime.TryParse(Value, out DateTime dt))
+                        return dt.ToString("o"); // ISO 8601 形式
+                    return null;
+                case SchemaParameterType.None:
+                    return null;
+                default:
+                    return Value;
             }
         }
-        return values;
+
+        public Dictionary<string, object> ToJsonSchemaPiece()
+            => JsonSchemaGenerator.CreatePrimitiveSchema(
+                ParameterType,
+                Description,
+                Enum,
+                double.IsNaN(Min) ? (double?)null : Min,
+                double.IsNaN(Max) ? (double?)null : Max,
+                Pattern);
+
+        public virtual string GenerateMarkDown(string description = null)
+        {
+            if (string.IsNullOrEmpty(ParameterName))
+                return null;
+            string result = ($"* {ParameterName} : {Value}");
+            if (ParameterType == SchemaParameterType.None)
+            {
+                result = ($"* {ParameterName}");
+            }
+            if (!string.IsNullOrEmpty(description))
+            {
+                result += ($"\n  * {description}");
+            }
+            else if (!string.IsNullOrEmpty(Description))
+            {
+                result += ($"\n  * {Description}");
+            }
+            return result;
+        }
+    }
+
+
+    public interface IJsonSchema : ICloneable
+    {
+        string Name { get; }
+        Dictionary<string, object> GenerateJsonSchema();
+        void ParseValueDict(Dictionary<string, object> dict);
     }
 
     /// <summary>
-    /// 各パラメータの説明をマークダウン形式で生成します。
-    /// ヘッダレベル（数字）を指定でき、SchemaName を見出しとして使用します。
-    /// 例（headerLevel=2 の場合）:
-    /// ## 請求書番号
-    /// * invoiceNumber : INV1234 
-    ///   * 請求書番号
+    /// スキーマーと値のパラメーターを保持し、
+    /// それを JSON Schema、値オブジェクト、さらにはマークダウン形式に変換するためのクラス。
     /// </summary>
-    public virtual string GenerateMarkDown(string header = null, int headerLevel = 2, Func<T, bool> filter = null)
+    [Serializable]
+    public class RealTimeJsonSchema<T> : IJsonSchema where T : SchemaParameter
     {
-        StringBuilder sb = new StringBuilder();
-        string headerPrefix = new string('#', headerLevel);
-        sb.AppendLine($"{headerPrefix} {(string.IsNullOrEmpty(header) ? Name : header)}");
+        [Tooltip("スキーマ名")]
+        public string Name { get; }
 
-        if (Parameters != null)
+        [Tooltip("パラメーター定義の配列")]
+        public T[] Parameters = new T[0];
+
+        public RealTimeJsonSchema(string name)
         {
-            foreach (var param in Parameters)
+            Name = name;
+        }
+
+        public virtual Dictionary<string, object> GenerateJsonSchema(Func<T, bool> filter = null)
+        {
+            var members = Parameters?
+                .Where(p => !string.IsNullOrEmpty(p.ParameterName) &&
+                            (filter == null || filter(p)))
+                .Select(p => (p.ParameterName, p.ToJsonSchemaPiece()))
+                .ToList() ?? new List<(string, Dictionary<string, object>)>();
+            return new Dictionary<string, object>{
+                { "name", Name },
+                { "schema", JsonSchemaGenerator.BuildObjectSchema(members)}
+            };
+        }
+
+        /// <summary>
+        /// 既定の引数
+        /// </summary>
+        /// <returns></returns>
+        public Dictionary<string, object> GenerateJsonSchema() => GenerateJsonSchema(null);
+
+        /// <summary>
+        /// 現在設定されている各パラメーターの値を、パラメーター名をキーとする Dictionary として返します。
+        /// API への値投げなどに使用できます。
+        /// </summary>
+        public Dictionary<string, object> GenerateValuesObject(Func<T, bool> filter = null)
+        {
+            Dictionary<string, object> values = new Dictionary<string, object>();
+            if (Parameters != null)
             {
-                if (string.IsNullOrEmpty(param.ParameterName) || (filter != null && !filter(param)))
-                    continue;
-                var markdown = param.GenerateMarkDown();
-                if (!string.IsNullOrEmpty(markdown))
+                foreach (var param in Parameters)
                 {
-                    sb.AppendLine(markdown);
+                    if (string.IsNullOrEmpty(param.ParameterName) || (filter != null && !filter(param)))
+                        continue;
+                    values[param.ParameterName] = param.GetValue();
+                }
+            }
+            return values;
+        }
+
+        /// <summary>
+        /// 各パラメーターの説明をマークダウン形式で書き出します。
+        /// 見出しレベル（初期値3）を指定でき、SchemaName を見出しとして使用します。
+        /// （headerLevel=2 の場合）:
+        /// ## 請求番号
+        /// * invoiceNumber : INV1234 
+        ///   * 請求番号
+        /// </summary>
+        public virtual string GenerateMarkDown(string header = null, int headerLevel = 2, Func<T, bool> filter = null)
+        {
+            StringBuilder sb = new StringBuilder();
+            string headerPrefix = new string('#', headerLevel);
+            sb.AppendLine($"{headerPrefix} {(string.IsNullOrEmpty(header) ? Name : header)}");
+
+            if (Parameters != null)
+            {
+                foreach (var param in Parameters)
+                {
+                    if (string.IsNullOrEmpty(param.ParameterName) || (filter != null && !filter(param)))
+                        continue;
+                    var markdown = param.GenerateMarkDown();
+                    if (!string.IsNullOrEmpty(markdown))
+                    {
+                        sb.AppendLine(markdown);
+                    }
+                }
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// schema に定義された各パラメーターの名前に対応する値を Value に設定
+        /// </summary>
+        public virtual void ParseValueDict(Dictionary<string, object> valuesDict)
+        {
+            if (Parameters != null)
+            {
+                foreach (var param in Parameters)
+                {
+                    if (!string.IsNullOrEmpty(param.ParameterName) && valuesDict.ContainsKey(param.ParameterName))
+                    {
+                        param.Value = valuesDict[param.ParameterName]?.ToString();
+                    }
                 }
             }
         }
-        return sb.ToString();
-    }
 
-    /// <summary>
-    /// schema に定義された各パラメータの名前に対応する値を Value に設定
-    /// </summary>
-    public virtual void PerseValueDict(Dictionary<string, object> valuesDict)
-    {
-        if (Parameters != null)
+        public virtual object Clone()
         {
-            foreach (var param in Parameters)
-            {
-                if (!string.IsNullOrEmpty(param.ParameterName) && valuesDict.ContainsKey(param.ParameterName))
-                {
-                    param.Value = valuesDict[param.ParameterName]?.ToString();
-                }
-            }
+            var json = JsonConvert.SerializeObject(this);
+            return JsonConvert.DeserializeObject<T>(json);
         }
     }
 
-    public virtual object Clone()
+    public class FlexibleInputAttribute : PropertyAttribute
     {
-        var json = JsonConvert.SerializeObject(this);
-        return JsonConvert.DeserializeObject<T>(json);
-    }
-}
+        public string EnumFieldName;
 
-public class FlexibleInputAttribute : PropertyAttribute
-{
-    public string EnumFieldName;
-
-    public FlexibleInputAttribute(string enumFieldName)
-    {
-        EnumFieldName = enumFieldName;
+        public FlexibleInputAttribute(string enumFieldName)
+        {
+            EnumFieldName = enumFieldName;
+        }
     }
-}
 
 #if UNITY_EDITOR
-[CustomPropertyDrawer(typeof(FlexibleInputAttribute))]
-public class FlexibleInputDrawer : PropertyDrawer
-{
-    private SerializedProperty FindRelativeProperty(SerializedProperty property, string name)
+    [CustomPropertyDrawer(typeof(FlexibleInputAttribute))]
+    public class FlexibleInputDrawer : PropertyDrawer
     {
-        string path = property.propertyPath;
-        string prefix = path.Substring(0, path.LastIndexOf('.'));
-        return property.serializedObject.FindProperty($"{prefix}.{name}");
-    }
-
-    public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
-    {
-        FlexibleInputAttribute attr = (FlexibleInputAttribute)attribute;
-        SerializedProperty enumProp = FindRelativeProperty(property, attr.EnumFieldName);
-
-        if (enumProp == null || enumProp.propertyType != SerializedPropertyType.Enum)
+        private SerializedProperty FindRelativeProperty(SerializedProperty property, string name)
         {
-            EditorGUI.LabelField(position, label.text, "invalidEnumReference");
-            return;
+            string path = property.propertyPath;
+            string prefix = path.Substring(0, path.LastIndexOf('.'));
+            return property.serializedObject.FindProperty($"{prefix}.{name}");
         }
 
-        SchemaParameterType type = (SchemaParameterType)enumProp.enumValueIndex;
-
-        switch (type)
+        public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
         {
-            case SchemaParameterType.String:
-            case SchemaParameterType.DateTime:
-                property.stringValue = EditorGUI.TextField(position, label, property.stringValue);
-                break;
-            case SchemaParameterType.Number:
-                if (float.TryParse(property.stringValue, out float f))
-                {
-                    f = EditorGUI.FloatField(position, label, f);
-                }
-                else
-                {
-                    f = EditorGUI.FloatField(position, label, 0f);
-                }
-                property.stringValue = f.ToString();
-                break;
-            case SchemaParameterType.Boolean:
-                bool b = property.stringValue == "true";
-                b = EditorGUI.Toggle(position, label, b);
-                property.stringValue = b ? "true" : "false";
-                break;
-            case SchemaParameterType.None:
-                break;
+            FlexibleInputAttribute attr = (FlexibleInputAttribute)attribute;
+            SerializedProperty enumProp = FindRelativeProperty(property, attr.EnumFieldName);
+
+            if (enumProp == null || enumProp.propertyType != SerializedPropertyType.Enum)
+            {
+                EditorGUI.LabelField(position, label.text, "invalidEnumReference");
+                return;
+            }
+
+            SchemaParameterType type = (SchemaParameterType)enumProp.enumValueIndex;
+
+            switch (type)
+            {
+                case SchemaParameterType.String:
+                case SchemaParameterType.DateTime:
+                    property.stringValue = EditorGUI.TextField(position, label, property.stringValue);
+                    break;
+                case SchemaParameterType.Number:
+                    if (float.TryParse(property.stringValue, out float f))
+                    {
+                        f = EditorGUI.FloatField(position, label, f);
+                    }
+                    else
+                    {
+                        f = EditorGUI.FloatField(position, label, 0f);
+                    }
+                    property.stringValue = f.ToString();
+                    break;
+                case SchemaParameterType.Boolean:
+                    bool b = property.stringValue == "true";
+                    b = EditorGUI.Toggle(position, label, b);
+                    property.stringValue = b ? "true" : "false";
+                    break;
+                case SchemaParameterType.None:
+                    break;
+            }
+        }
+
+        public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
+        {
+            FlexibleInputAttribute attr = (FlexibleInputAttribute)attribute;
+            SerializedProperty enumProp = FindRelativeProperty(property, attr.EnumFieldName);
+
+            if (enumProp == null || enumProp.propertyType != SerializedPropertyType.Enum)
+                return EditorGUIUtility.singleLineHeight;
+
+            SchemaParameterType type = (SchemaParameterType)enumProp.enumValueIndex;
+            return (type == SchemaParameterType.None) ? 0f : EditorGUIUtility.singleLineHeight;
         }
     }
-
-    public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
-    {
-        FlexibleInputAttribute attr = (FlexibleInputAttribute)attribute;
-        SerializedProperty enumProp = FindRelativeProperty(property, attr.EnumFieldName);
-
-        if (enumProp == null || enumProp.propertyType != SerializedPropertyType.Enum)
-            return EditorGUIUtility.singleLineHeight;
-
-        SchemaParameterType type = (SchemaParameterType)enumProp.enumValueIndex;
-        return (type == SchemaParameterType.None) ? 0f : EditorGUIUtility.singleLineHeight;
-    }
-}
 #endif
+}

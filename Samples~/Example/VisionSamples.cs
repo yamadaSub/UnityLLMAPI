@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityLLMAPI.Chat;
 
 /// <summary>
 /// 画像編集・画像認識ワークフローのサンプル。
