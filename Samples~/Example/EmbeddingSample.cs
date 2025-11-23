@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// EmbeddingManager ‚ğ—p‚¢‚½ƒxƒNƒgƒ‹‰‰Z‚Æ—Ş—“xŒvZAHadamard ‰‰Z‚ÌƒTƒ“ƒvƒ‹B
-/// ƒXƒNƒŠƒvƒg‚ğƒV[ƒ“‚É”z’u‚·‚é‚Æ Start ‚Å©“®Às‚³‚êAŒ‹‰Ê‚ª Console ‚Éo—Í‚³‚ê‚éB
+/// EmbeddingManager ã‚’ç”¨ã„ãŸãƒ™ã‚¯ãƒˆãƒ«æ¼”ç®—ã¨é¡ä¼¼åº¦è¨ˆç®—ã€Hadamard æ¼”ç®—ã®ã‚µãƒ³ãƒ—ãƒ«ã€‚
+/// ã‚¹ã‚¯ãƒªãƒ—ãƒˆã‚’ã‚·ãƒ¼ãƒ³ã«é…ç½®ã™ã‚‹ã¨ Start ã§è‡ªå‹•å®Ÿè¡Œã•ã‚Œã€çµæœãŒ Console ã«å‡ºåŠ›ã•ã‚Œã‚‹ã€‚
 /// </summary>
 public class EmbeddingSample : MonoBehaviour
 {
@@ -14,12 +14,12 @@ public class EmbeddingSample : MonoBehaviour
             EmmbeddingModelType.Gemini01_768);
         Debug.Log($"[EmbeddingSample] Gemini embedding (dim=768) length: {projected768?.Dimension}");
 
-        // üŒ`‰‰ZŒã‚É³‹K‰»‚µ‚ÄƒRƒTƒCƒ“—Ş—“x‚É”õ‚¦‚é
+        // ç·šå½¢æ¼”ç®—å¾Œã«æ­£è¦åŒ–ã—ã¦ã‚³ã‚µã‚¤ãƒ³é¡ä¼¼åº¦ã«å‚™ãˆã‚‹
         var king = await EmbeddingManager.CreateEmbeddingAsync("king", EmmbeddingModelType.Gemini01_768);
         var man = await EmbeddingManager.CreateEmbeddingAsync("man", EmmbeddingModelType.Gemini01_768);
         var woman = await EmbeddingManager.CreateEmbeddingAsync("woman", EmmbeddingModelType.Gemini01_768);
 
-        // üŒ`‰‰ZŒã‚É³‹K‰»‚µ‚ÄƒRƒTƒCƒ“—Ş—“x‚É”õ‚¦‚é
+        // ç·šå½¢æ¼”ç®—å¾Œã«æ­£è¦åŒ–ã—ã¦ã‚³ã‚µã‚¤ãƒ³é¡ä¼¼åº¦ã«å‚™ãˆã‚‹
         var query = (king - man + woman).Normalized();
 
         var corpusWords = new List<string> { "queen", "king", "woman", "man" };
@@ -29,7 +29,7 @@ public class EmbeddingSample : MonoBehaviour
             corpus.Add(await EmbeddingManager.CreateEmbeddingAsync(word, EmmbeddingModelType.Gemini01_768));
         }
 
-        Debug.Log("[EmbeddingSample] —Ş—“xŒvZ (Cosine)");
+        Debug.Log("[EmbeddingSample] é¡ä¼¼åº¦è¨ˆç®— (Cosine) - Optimized with Magnitude Cache");
         var ranked = EmbeddingManager.RankByCosine(query, corpus, topK: -1);
         for (int i = 0; i < ranked.Count; i++)
         {
@@ -37,11 +37,11 @@ public class EmbeddingSample : MonoBehaviour
             Debug.Log($"{i}: {corpusWords[result.Index]} (score={result.Score})");
         }
 
-        // Hadamard Ï / œZ‚Ì—ái“¯ŸŒ³ƒxƒNƒgƒ‹‚ª‘O’ñj
+        // Hadamard ç© / é™¤ç®—ã®ä¾‹ï¼ˆåŒæ¬¡å…ƒãƒ™ã‚¯ãƒˆãƒ«ãŒå‰æï¼‰
         var product = king.HadamardProduct(man);
         var quotient = king.HadamardQuotient(man);
         var quotientArray = quotient.ToFloatArray();
         var sampleValue = quotientArray.Length > 0 ? quotientArray[0] : 0f;
-        Debug.Log($"[EmbeddingSample] Hadamard Ï‚Ì—v‘f”: {product.ToFloatArray().Length}, Hadamard œZ‚Ìˆê—v‘f: {sampleValue}");
+        Debug.Log($"[EmbeddingSample] Hadamard ç©ã®è¦ç´ æ•°: {product.ToFloatArray().Length}, Hadamard é™¤ç®—ã®ä¸€è¦ç´ : {sampleValue}");
     }
 }

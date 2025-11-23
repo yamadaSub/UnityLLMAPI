@@ -32,6 +32,13 @@ public class SchemaParameter
     public bool Required = true;
     public string[] Enum;
 
+    [Tooltip("最小値 (Numberのみ)")]
+    public double Min = double.NaN;
+    [Tooltip("最大値 (Numberのみ)")]
+    public double Max = double.NaN;
+    [Tooltip("正規表現パターン (Stringのみ)")]
+    public string Pattern;
+
     /// <summary>
     /// ParameterType に合わせた型に変換した値を返します。
     /// 変換に失敗した場合は、Number は 0、Boolean は false、DateTime は null を返します。
@@ -62,7 +69,13 @@ public class SchemaParameter
     }
 
     public Dictionary<string, object> ToJsonSchemaPiece()
-        => JsonSchemaGenerator.CreatePrimitiveSchema(ParameterType, Description, Enum);
+        => JsonSchemaGenerator.CreatePrimitiveSchema(
+            ParameterType, 
+            Description, 
+            Enum, 
+            double.IsNaN(Min) ? (double?)null : Min, 
+            double.IsNaN(Max) ? (double?)null : Max, 
+            Pattern);
 
     public virtual string GenerateMarkDown(string description = null)
     {

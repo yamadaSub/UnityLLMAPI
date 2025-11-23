@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.ComponentModel;
 using UnityEngine;
 
 /// <summary>
@@ -9,7 +11,7 @@ using UnityEngine;
 public class ExampleUsage : MonoBehaviour
 {
     [Header("共通設定")]
-    [Tooltip("テキスト系の呼び出しで使用するモデル。Gemini 2.5 / GPT などを指定可能。")]
+    [Tooltip("テキスト系の呼び出しで使用するモデル。Gemini 3 / Gemini 2.5 / GPT などを指定可能。")]
     public AIModelType chatModel = AIModelType.Gemini25Flash;
 
     [Tooltip("チャット送信時のユーザープロンプト。")]
@@ -125,16 +127,29 @@ public class ExampleUsage : MonoBehaviour
     [Serializable]
     public class Invoice
     {
+        [Description("請求書番号 (例: INV-001)")]
+        [SchemaRegularExpression(@"^INV-\d{3}$")]
         public string invoiceNumber;
+
+        [Description("発行日 (YYYY-MM-DD)")]
         public string date;
+
+        [Description("合計金額")]
+        [SchemaRange(0, 1000000)]
         public float amount;
+
+        [Description("顧客リスト")]
         public Customer[] customers;
     }
 
     [Serializable]
     public class Customer
     {
+        [Description("顧客名")]
         public string name;
+
+        [Description("年齢")]
+        [SchemaRange(0, 150)]
         public int age;
     }
     #endregion

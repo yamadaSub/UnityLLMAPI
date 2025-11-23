@@ -15,11 +15,18 @@ public class VisionSamples : MonoBehaviour
     [Tooltip("画像編集時にモデルへ伝える指示。空の場合は『水彩画風にしてください。』を使用します。")]
     public string editInstruction = "水彩画風にしてください。";
 
+    [Tooltip("画像生成・編集に使用するモデル。現在は Gemini 2.5 Flash Image Preview / Gemini 3 Pro Image Preview のみがサポートされています。")]
+    public AIModelType imageGenerationModel = AIModelType.Gemini25FlashImagePreview;
+
+    [Header("Output Settings")]
+    [Tooltip("画像の保存先フォルダパス (Assets からの相対パス)。空の場合は Assets 直下になります。")]
+    public string outputFolderPath = "Assets";
+
     [Header("Image Recognition")]
     [Tooltip("マルチモーダルモデルに解析させる画像。")]
     public Texture2D imageToDescribe;
 
-    [Tooltip("画像入力に対応したモデル。Gemini 2.5 Flash や GPT-4o などを指定できます。")]
+    [Tooltip("画像認識（Vision）に使用するモデル。GPT-4o や Gemini 2.5 Flash などが指定できます。")]
     public AIModelType recognitionModel = AIModelType.Gemini25Flash;
 
     [TextArea]
@@ -57,16 +64,52 @@ public class VisionSamples : MonoBehaviour
             }
         };
 
+        // generationConfig の構築
+        var config = new Dictionary<string, object>
+        {
+            { "responseModalities", new [] { "IMAGE" } }
+        };
+        
+        var initBody = new Dictionary<string, object>
+        {
+            { "generationConfig", config }
+        };
+
         // 画像生成 API を実行
-        var response = await AIManager.GenerateImagesAsync(prompts, AIModelType.Gemini25FlashImagePreview);
+        var response = await AIManager.GenerateImagesAsync(prompts, imageGenerationModel, initBody);
 
         if (response?.images.Count > 0)
         {
             var firstImage = response.images[0];
 #if UNITY_EDITOR
-            var outputPath = System.IO.Path.Combine(Application.persistentDataPath, "gemini_image_edit.png");
-            System.IO.File.WriteAllBytes(outputPath, firstImage.data);
-            Debug.Log($"Gemini image edit saved to {outputPath}");
+            // 保存先パスの決定 (Assets からの相対パス)
+            string relativeFolder = string.IsNullOrEmpty(outputFolderPath) ? "Assets" : outputFolderPath;
+            if (!relativeFolder.StartsWith("Assets")) relativeFolder = System.IO.Path.Combine("Assets", relativeFolder);
+            
+            // 絶対パスに変換 (IO 用)
+            string absoluteFolder = relativeFolder.Replace("Assets", Application.dataPath);
+            
+            // フォルダが存在しない場合は作成
+            if (!System.IO.Directory.Exists(absoluteFolder))
+            {
+                System.IO.Directory.CreateDirectory(absoluteFolder);
+            }
+
+            var fileName = $"gemini_image_{System.DateTime.Now:yyyyMMdd_HHmmss}.png";
+            var absolutePath = System.IO.Path.Combine(absoluteFolder, fileName);
+            System.IO.File.WriteAllBytes(absolutePath, firstImage.data);
+            
+            // AssetDatabase を更新してエディタに反映
+            UnityEditor.AssetDatabase.Refresh();
+            
+            var assetPath = System.IO.Path.Combine(relativeFolder, fileName).Replace("\\", "/");
+            var texture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            if (texture != null)
+            {
+                UnityEditor.Selection.activeObject = texture;
+                UnityEditor.EditorGUIUtility.PingObject(texture);
+            }
+            Debug.Log($"Gemini image saved to {assetPath}");
 #else
             Debug.Log($"Gemini image edit generated. Bytes: {firstImage.data?.Length ?? 0} ({firstImage.mimeType})");
 #endif

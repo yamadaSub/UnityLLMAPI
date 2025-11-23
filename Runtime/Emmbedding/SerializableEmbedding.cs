@@ -22,9 +22,23 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
     private string model = string.Empty;
 
     [NonSerialized] private float[] cache; // 遅延復元キャッシュ
+    [NonSerialized] private float? magnitudeCache;
 
     public string Model => model;
     public int Dimension => dimension;
+
+    public float Magnitude
+    {
+        get
+        {
+            if (magnitudeCache.HasValue) return magnitudeCache.Value;
+            var v = ToFloatArray();
+            double sum = 0d;
+            for (int i = 0; i < v.Length; i++) sum += v[i] * v[i];
+            magnitudeCache = (float)Math.Sqrt(sum);
+            return magnitudeCache.Value;
+        }
+    }
 
     public SerializableEmbedding(string modelName)
     {
@@ -55,6 +69,7 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
     /// <summary>与えられた float 配列を量子化し、内部に保存する。</summary>
     public void SetFromFloatArray(ReadOnlySpan<float> source)
     {
+        magnitudeCache = null; // Reset cache
         dimension = source.Length;
         if (dimension == 0)
         {
@@ -239,20 +254,22 @@ public class SerializableEmbedding : ISerializationCallbackReceiver
     public float CosineSimilarity(SerializableEmbedding other)
     {
         EnsureSameDim(other);
+        
+        // Use cached magnitudes if available to avoid re-calculation
+        float ma = this.Magnitude;
+        float mb = other.Magnitude;
+        
+        if (ma <= 0f || mb <= 0f) return 0f;
+
         var va = ToFloatArray();
         var vb = other.ToFloatArray();
-        double dot = 0d, na = 0d, nb = 0d;
+        double dot = 0d;
         for (int i = 0; i < va.Length; i++)
         {
-            double x = va[i];
-            double y = vb[i];
-            dot += x * y;
-            na += x * x;
-            nb += y * y;
+            dot += va[i] * vb[i];
         }
-        double denom = Math.Sqrt(na) * Math.Sqrt(nb);
-        if (denom <= 0d) return 0f;
-        return (float)(dot / denom);
+        
+        return (float)(dot / (ma * mb));
     }
 
     #endregion

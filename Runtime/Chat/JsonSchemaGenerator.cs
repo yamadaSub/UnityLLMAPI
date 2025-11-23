@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.ComponentModel;
 using System.Reflection;
 using System.Text;
+using System.Threading.Tasks;
 
 [Serializable]
 public enum SchemaParameterType
@@ -13,6 +15,7 @@ public enum SchemaParameterType
     DateTime,
     None
 }
+
 [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
 public class AllowedValuesAttribute : Attribute
 {
@@ -24,38 +27,10 @@ public class AllowedValuesAttribute : Attribute
     }
 }
 
-
 public static class JsonSchemaGenerator
 {
-    /// <summary>
-    /// ƒvƒŠƒ~ƒeƒBƒu¨Schema •ÏŠ·
-    /// </summary>
-    public static Dictionary<string, object> CreatePrimitiveSchema(
-        SchemaParameterType pt, string description = null, string[] enumList = null)
-    {
-        var d = new Dictionary<string, object>();
-        switch (pt)
-        {
-            case SchemaParameterType.String:
-            case SchemaParameterType.None: //Primitive•ÏŠ·‚ª‚©‚©‚Á‚Ä‚¢‚é“_‚Å•s‰Â”\‚È‚Ì‚ÅString‚Åˆ—
-                d["type"] = "string"; break;
-            case SchemaParameterType.Number: d["type"] = "number"; break;
-            case SchemaParameterType.Boolean: d["type"] = "boolean"; break;
-            case SchemaParameterType.DateTime:
-                d["type"] = "string";
-                d["format"] = "date-time";
-                break;
 
-        }
-        if(enumList != null&& enumList.Length != 0)
-        {
-            d["enum"] = enumList;
-        }
-        if (!string.IsNullOrEmpty(description)) d["description"] = description;
-        return d;
-    }
-
-    /* CLR Œ^ ¨ enum •ÏŠ·iƒŠƒtƒŒƒNƒVƒ‡ƒ“‘¤‚¾‚¯‚ªg‚¤j */
+    /* CLR å‹ â†’ enum å¤‰æ›ï¼ˆãƒªãƒ•ãƒ¬ã‚¯ã‚·ãƒ§ãƒ³å´ã ã‘ãŒä½¿ã†ï¼‰ */
     private static SchemaParameterType ToSchemaParameterType(Type t)
     {
         if (t == typeof(string)) return SchemaParameterType.String;
@@ -64,12 +39,12 @@ public static class JsonSchemaGenerator
         if (t.IsPrimitive || t == typeof(decimal) ||
             t == typeof(double) || t == typeof(float))
             return SchemaParameterType.Number;
-        // ‚»‚êˆÈŠO‚ÍNone‚Æ‚µ‚Äˆµ‚¤(Array‚âObject,Enum)
+        // ãã‚Œä»¥å¤–ã¯Noneã¨ã—ã¦æ‰±ã†(Arrayã‚„Object,Enum)
         return SchemaParameterType.None;
     }
 
     /* ------------------------------------------------------------------
-     * ‡A properties / required ‚ğ‚Ü‚Æ‚ß‚ÄuŠ®¬Œ`v‚É‚·‚é
+     * â‘¡ properties / required ã‚’ã¾ã¨ã‚ã¦ã€Œå®Œæˆå½¢ã€ã«ã™ã‚‹
      * ------------------------------------------------------------------ */
     public static Dictionary<string, object> BuildObjectSchema(
         IEnumerable<(string key, Dictionary<string, object> schema)> members)
@@ -92,7 +67,7 @@ public static class JsonSchemaGenerator
     }
 
     /* ------------------------------------------------------------------
-     * ‡B Šù‘¶ API: Œ^ T ¨ JSON-Schema
+     * â‘¢ æ—¢å­˜ API: å‹ T â†’ JSON-Schema
      * ------------------------------------------------------------------ */
     public static Dictionary<string, object> GenerateSchema<T>(string schemaName = null)
     {
@@ -126,7 +101,7 @@ public static class JsonSchemaGenerator
             }
             if (mt.IsArrayOrList(out Type elementType))
             {
-                // ”z—ñ‚Ìê‡
+                // é…åˆ—ã®å ´åˆ
                 var elementSchemaType = ToSchemaParameterType(elementType);
                 Dictionary<string, object> itemSchema;
                 if (elementSchemaType == SchemaParameterType.None)
@@ -147,12 +122,66 @@ public static class JsonSchemaGenerator
             }
             else
             {
-                // ’Êí‚ÌƒvƒŠƒ~ƒeƒBƒu
+                // é€šå¸¸ã®ãƒ—ãƒªãƒŸãƒ†ã‚£ãƒ–
                 var elementSchemaType = ToSchemaParameterType(mt);
-                members.Add((m.Name, CreatePrimitiveSchema(elementSchemaType, desc, allowedValue)));
+                var rangeAttr = m.GetCustomAttribute<SchemaRangeAttribute>();
+                var regexAttr = m.GetCustomAttribute<SchemaRegularExpressionAttribute>();
+                double? minVal = rangeAttr != null ? rangeAttr.Minimum : (double?)null;
+                double? maxVal = rangeAttr != null ? rangeAttr.Maximum : (double?)null;
+                string pat = regexAttr?.Pattern;
+
+                members.Add((m.Name, CreatePrimitiveSchema(elementSchemaType, desc, allowedValue, minVal, maxVal, pat)));
             }
         }
         return BuildObjectSchema(members);
+    }
+    public static Dictionary<string, object> CreatePrimitiveSchema(
+        SchemaParameterType type,
+        string description = null,
+        string[] enumValues = null,
+        double? min = null,
+        double? max = null,
+        string pattern = null)
+    {
+        var schema = new Dictionary<string, object>();
+
+        switch (type)
+        {
+            case SchemaParameterType.String:
+                schema["type"] = "string";
+                if (enumValues != null && enumValues.Length > 0)
+                {
+                    schema["enum"] = enumValues;
+                }
+                if (!string.IsNullOrEmpty(pattern))
+                {
+                    schema["pattern"] = pattern;
+                }
+                break;
+            case SchemaParameterType.Number:
+                schema["type"] = "number";
+                if (min.HasValue) schema["minimum"] = min.Value;
+                if (max.HasValue) schema["maximum"] = max.Value;
+                break;
+            case SchemaParameterType.Boolean:
+                schema["type"] = "boolean";
+                break;
+            case SchemaParameterType.DateTime:
+                schema["type"] = "string";
+                schema["format"] = "date-time";
+                break;
+            default:
+                // fallback
+                schema["type"] = "string";
+                break;
+        }
+
+        if (!string.IsNullOrEmpty(description))
+        {
+            schema["description"] = description;
+        }
+
+        return schema;
     }
 }
 
@@ -225,13 +254,13 @@ public static class TypeExtend
     {
         if (visited.Contains(t))
         {
-            sb.AppendLine($"{new string(' ', level * 2)}- **{t.Name}** (Ä‹AQÆ‚Ì‚½‚ßÈ—ª)");
+            sb.AppendLine($"{new string(' ', level * 2)}- **{t.Name}** (å†å¸°å‚ç…§ã®ãŸã‚çœç•¥)");
             return;
         }
 
         visited.Add(t);
 
-        // Enum©‘Ì‚ª‘ÎÛŒ^‚Ìê‡
+        // Enumè‡ªä½“ãŒå¯¾è±¡å‹ã®å ´åˆ
         if (t.IsEnum)
         {
             sb.AppendLine($"{new string(' ', level * 2)}- **Enum: {t.Name}**");
@@ -270,7 +299,7 @@ public static class TypeExtend
                 continue;
             }
 
-            // Enum ƒtƒB[ƒ‹ƒh
+            // Enum ãƒ•ã‚£ãƒ¼ãƒ«ãƒ‰
             if (fieldType.IsEnum)
             {
                 sb.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`Enum {fieldType.Name}`): {fieldDesc}");
@@ -283,7 +312,7 @@ public static class TypeExtend
                 continue;
             }
 
-            // ’PƒŒ^‚Ü‚½‚ÍƒJƒXƒ^ƒ€Œ^
+            // å˜ç´”å‹ã¾ãŸã¯ã‚«ã‚¹ã‚¿ãƒ å‹
             sb.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`{fieldType.Name}`): {fieldDesc}");
 
             if (!IsSimple(fieldType))

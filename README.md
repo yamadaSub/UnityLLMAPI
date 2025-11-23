@@ -58,12 +58,44 @@ var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini25Flash
 var invoice = await AIManager.SendStructuredMessageAsync<Invoice>(messages, AIModelType.GPT4o);
 ```
 指定した型に合わせて JSON Schema を自動生成し、応答をデシリアライズします。
+`[Description]`, `[Range]`, `[RegularExpression]` などの属性を使用して、より詳細な制約を定義できます。
+
+```csharp
+public class Invoice
+{
+    [Description("請求書番号 (例: INV-001)")]
+    [RegularExpression(@"^INV-\d{3}$")]
+    public string InvoiceNumber;
+
+    [Description("合計金額")]
+    [Range(0, 1000000)]
+    public double TotalAmount;
+}
+```
+### 補足: 独自のバリデーション属性について
+`[SchemaRange]` や `[SchemaRegularExpression]` は、LLM に渡す **JSON Schema の制約条件 (`minimum`, `maximum`, `pattern`) を生成するため** に使用します。
+これにより、LLM が生成する構造化データの値の範囲やフォーマットを制御できます。
+
+**使用例と生成される Schema:**
+```csharp
+public class UserProfile
+{
+    [Description("年齢")]
+    [SchemaRange(0, 150)] // JSON Schema: "minimum": 0, "maximum": 150 に変換されます
+    public int Age;
+
+    [Description("ユーザーID (英小文字のみ)")]
+    [SchemaRegularExpression(@"^[a-z]+$")] // JSON Schema: "pattern": "^[a-z]+$" に変換されます
+    public string UserId;
+}
+```
 
 ### 3. RealTime Schema / Function Calling
 - `SendStructuredMessageWithRealTimeSchemaAsync`：`RealTimeJsonSchema` の値を都度更新
+  - `SchemaParameter` に `Min`, `Max`, `Pattern` を設定することで、Inspector 上で制約を定義可能です。
 - `SendFunctionCallMessageAsync`：LLM からの関数呼び出し結果を `IJsonSchema` として取得
 
-### 4. 画像入出力 (Gemini 2.5 Flash Image Preview)
+### 4. 画像入出力 (Gemini 2.5 Flash Image Preview / Gemini 3 Pro Image Preview)
 ```csharp
 var editMessages = new List<Message>
 {

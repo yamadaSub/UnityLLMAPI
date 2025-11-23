@@ -24,7 +24,9 @@ public enum AIModelType
     Gemini25Pro,
     Gemini25Flash,
     Gemini25FlashLite,
-    Gemini25FlashImagePreview
+    Gemini25FlashImagePreview,
+    Gemini3,
+    Gemini3ProImagePreview
 }
 
 /// <summary>
@@ -551,13 +553,10 @@ public static class AIManager
         {
             // ignored
         }
-
         return true;
     }
-#endif
 
-    private static bool IsGeminiModel(AIModelType model)
-        => model == AIModelType.Gemini25 || model == AIModelType.Gemini25Pro || model == AIModelType.Gemini25Flash || model == AIModelType.Gemini25FlashLite;
+#endif
 
     private static (string endpoint, string apiKey) GetEndpointAndApiKey(AIModelType model)
     {
@@ -576,6 +575,8 @@ public static class AIManager
             case AIModelType.Gemini25Flash:
             case AIModelType.Gemini25FlashLite:
             case AIModelType.Gemini25FlashImagePreview:
+            case AIModelType.Gemini3:
+            case AIModelType.Gemini3ProImagePreview:
                 return (geminiApiBase, GoogleApiKey);
             default:
                 return (openAiEndpoint, OpenAIApiKey);
@@ -596,6 +597,8 @@ public static class AIManager
             case AIModelType.Gemini25Flash:
             case AIModelType.Gemini25FlashLite:
             case AIModelType.Gemini25FlashImagePreview:
+            case AIModelType.Gemini3:
+            case AIModelType.Gemini3ProImagePreview:
                 return "Provide a Google API key via AIManagerBehaviour, UnityLLMAPI.GOOGLE_API_KEY (EditorUserSettings), or the GOOGLE_API_KEY environment variable.";
             default:
                 return "Configure the matching API key on AIManagerBehaviour, in EditorUserSettings (UnityLLMAPI.*), or via environment variables.";
@@ -627,9 +630,24 @@ public static class AIManager
                 return "gemini-2.5-flash-lite";
             case AIModelType.Gemini25FlashImagePreview:
                 return "gemini-2.5-flash-image-preview";
+            case AIModelType.Gemini3:
+                return "gemini-3.0-pro-exp";
+            case AIModelType.Gemini3ProImagePreview:
+                return "gemini-3-pro-image-preview";
             default:
                 return "gpt-4o";
         }
+    }
+
+    private static bool IsGeminiModel(AIModelType model)
+    {
+        return model == AIModelType.Gemini25 ||
+               model == AIModelType.Gemini25Pro ||
+               model == AIModelType.Gemini25Flash ||
+               model == AIModelType.Gemini25FlashLite ||
+               model == AIModelType.Gemini25FlashImagePreview ||
+               model == AIModelType.Gemini3 ||
+               model == AIModelType.Gemini3ProImagePreview;
     }
 
     #region Task 化した各メソッド
@@ -640,9 +658,9 @@ public static class AIManager
     /// </summary>
     public static async Task<string> SendMessageAsync(List<Message> messages, AIModelType model, Dictionary<string, object> initBody=null)
     {
-        if (model == AIModelType.Gemini25FlashImagePreview)
+        if (model == AIModelType.Gemini25FlashImagePreview || model == AIModelType.Gemini3ProImagePreview)
         {
-            Debug.LogError("gemini-2.5-flash-image-preview is image-generation focused. Use AIManager.GenerateImageAsync or GenerateImagesAsync for this model.");
+            Debug.LogError($"{model} is image-generation focused. Use AIManager.GenerateImageAsync or GenerateImagesAsync for this model.");
             return null;
         }
 
@@ -766,11 +784,11 @@ public static class AIManager
     }
 
     /// <summary>
-    /// Gemini 2.5 Flash Image Preview を用いて画像生成（および画像編集）を行う。
+    /// Gemini 2.5 Flash Image Preview / Gemini 3 Pro Image Preview を用いて画像生成（および画像編集）を行う。
     /// プロンプトにはテキスト・画像パートのいずれも含めることができる。
     /// </summary>
     /// <param name="messages">ユーザー／システムメッセージのリスト。画像編集時は画像パートを含める。</param>
-    /// <param name="model">利用するモデル。現在は gemini-2.5-flash-image-preview のみ対応。</param>
+    /// <param name="model">利用するモデル。現在は Gemini 2.5 Flash Image Preview / Gemini 3 Pro Image Preview に対応。</param>
     /// <param name="initBody">generationConfig 等の追加パラメーターを付与したい場合に使用。</param>
     /// <returns>生成された画像群と元レスポンス JSON を格納した <see cref="ImageGenerationResponse"/>。</returns>
     public static async Task<ImageGenerationResponse> GenerateImagesAsync(
@@ -778,9 +796,9 @@ public static class AIManager
         AIModelType model = AIModelType.Gemini25FlashImagePreview,
         Dictionary<string, object> initBody = null)
     {
-        if (model != AIModelType.Gemini25FlashImagePreview)
+        if (model != AIModelType.Gemini25FlashImagePreview && model != AIModelType.Gemini3ProImagePreview)
         {
-            Debug.LogError($"GenerateImagesAsync currently supports only {AIModelType.Gemini25FlashImagePreview}. Requested model '{model}' is not yet implemented.");
+            Debug.LogError($"GenerateImagesAsync currently supports only Gemini25FlashImagePreview and Gemini3ProImagePreview. Requested model '{model}' is not yet implemented.");
             return null;
         }
 
