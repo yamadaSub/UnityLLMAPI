@@ -19,8 +19,8 @@ namespace UnityLLMAPI.Schema
 
     public static class JsonSchemaGenerator
     {
-        private static readonly Dictionary<Type, Dictionary<string, object>> SchemaCache = new();
-        private static readonly object CacheLock = new();
+        private static readonly Dictionary<Type, Dictionary<string, object>> SchemaCache = new Dictionary<Type, Dictionary<string, object>>();
+        private static readonly object CacheLock = new object();
 
         /* CLR 型 -> enum 変換。リフレクション側だけが使う */
         private static SchemaParameterType ToSchemaParameterType(Type t)

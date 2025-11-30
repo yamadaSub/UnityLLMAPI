@@ -1,0 +1,171 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using UnityEngine;
+using UnityEngine.Networking;
+using UnityLLMAPI.Common;
+using UnityLLMAPI.Schema;
+
+namespace UnityLLMAPI.Chat
+{
+    internal sealed class GrokClient : IProviderClient
+    {
+        private const string ChatEndpoint = "https://api.x.ai/v1/chat/completions";
+
+        public AIProvider Provider => AIProvider.Grok;
+
+        public async Task<RawChatResult> SendChatAsync(
+            ModelSpec model,
+            IReadOnlyList<Message> messages,
+            ChatRequestOptions options,
+            CancellationToken ct)
+        {
+            var apiKey = ApiKeyResolver.GrokApiKey;
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                Debug.LogError($"API key not configured. {ApiKeyResolver.GetRequiredEnvHint(model)}");
+                return FailureChatResult(model, "Missing Grok API key");
+            }
+
+            var body = new Dictionary<string, object>
+            {
+                { "model", model.ModelId },
+                { "messages", MessagePayloadBuilder.BuildOpenAiMessages(messages?.ToList() ?? new List<Message>()) }
+            };
+
+            AddFunctions(body, options?.Functions);
+            MergeAdditionalBody(body, options?.AdditionalBody);
+
+            var jsonBody = JsonConvert.SerializeObject(body);
+            using var req = BuildRequest(apiKey, jsonBody);
+            await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
+
+            return BuildRawChatResult(model, req);
+        }
+
+        public async Task<RawChatResult> SendStructuredAsync(
+            ModelSpec model,
+            IReadOnlyList<Message> messages,
+            string jsonSchema,
+            ChatRequestOptions options,
+            CancellationToken ct)
+        {
+            var apiKey = ApiKeyResolver.GrokApiKey;
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                Debug.LogError($"API key not configured. {ApiKeyResolver.GetRequiredEnvHint(model)}");
+                return FailureChatResult(model, "Missing Grok API key");
+            }
+
+            var parsedSchema = string.IsNullOrEmpty(jsonSchema)
+                ? new Dictionary<string, object>()
+                : JsonConvert.DeserializeObject<Dictionary<string, object>>(jsonSchema);
+
+            var body = new Dictionary<string, object>
+            {
+                { "model", model.ModelId },
+                { "messages", MessagePayloadBuilder.BuildOpenAiMessages(messages?.ToList() ?? new List<Message>()) },
+                { "response_format", new Dictionary<string, object>
+                    {
+                        { "type", "json_schema" },
+                        { "json_schema", parsedSchema ?? new Dictionary<string, object>() }
+                    }
+                }
+            };
+
+            MergeAdditionalBody(body, options?.AdditionalBody);
+
+            var jsonBody = JsonConvert.SerializeObject(body);
+            using var req = BuildRequest(apiKey, jsonBody);
+            await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
+
+            return BuildRawChatResult(model, req);
+        }
+
+        public Task<RawImageResult> GenerateImageAsync(
+            ModelSpec model,
+            ImageGenerationRequest request,
+            CancellationToken ct)
+        {
+            throw new System.NotSupportedException("Grok image generation is not implemented.");
+        }
+
+        public Task<RawEmbeddingResult> CreateEmbeddingAsync(
+            ModelSpec model,
+            IReadOnlyList<string> texts,
+            CancellationToken ct)
+        {
+            throw new System.NotSupportedException("Grok embeddings are not implemented.");
+        }
+
+        private static UnityWebRequest BuildRequest(string apiKey, string jsonBody)
+        {
+            var req = new UnityWebRequest(ChatEndpoint, "POST")
+            {
+                uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
+                downloadHandler = new DownloadHandlerBuffer()
+            };
+            req.SetRequestHeader("Content-Type", "application/json");
+            req.SetRequestHeader("Authorization", "Bearer " + apiKey);
+            return req;
+        }
+
+        private static void AddFunctions(Dictionary<string, object> body, IReadOnlyList<IJsonSchema> functions)
+        {
+            if (functions == null || functions.Count == 0) return;
+            body["functions"] = functions.Select(f => f.GenerateJsonSchema()).ToList();
+            body["function_call"] = "auto";
+        }
+
+        private static void MergeAdditionalBody(Dictionary<string, object> body, Dictionary<string, object> additional)
+        {
+            if (body == null || additional == null) return;
+            foreach (var kv in additional) body[kv.Key] = kv.Value;
+        }
+
+        private static JObject TryParse(string rawJson)
+        {
+            if (string.IsNullOrEmpty(rawJson)) return null;
+            try
+            {
+                return JObject.Parse(rawJson);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static RawChatResult BuildRawChatResult(ModelSpec model, UnityWebRequest req)
+        {
+            var rawJson = req.downloadHandler?.text;
+            return new RawChatResult
+            {
+                Provider = AIProvider.Grok,
+                ModelId = model.ModelId,
+                IsSuccess = req.result == UnityWebRequest.Result.Success,
+                StatusCode = req.responseCode,
+                ErrorMessage = req.result == UnityWebRequest.Result.Success ? null : req.error,
+                RawJson = rawJson,
+                Body = TryParse(rawJson)
+            };
+        }
+
+        private static RawChatResult FailureChatResult(ModelSpec model, string message)
+        {
+            return new RawChatResult
+            {
+                Provider = AIProvider.Grok,
+                ModelId = model.ModelId,
+                IsSuccess = false,
+                StatusCode = 0,
+                ErrorMessage = message,
+                RawJson = string.Empty,
+                Body = null
+            };
+        }
+    }
+}
