@@ -12,6 +12,7 @@ using UnityLLMAPI.Schema;
 
 namespace UnityLLMAPI.Chat
 {
+    // Gemini (Google) 向けの HTTP 実装をまとめた ProviderClient
     internal sealed class GeminiClient : IProviderClient
     {
         private const string ApiBase = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -19,6 +20,9 @@ namespace UnityLLMAPI.Chat
 
         public AIProvider Provider => AIProvider.Gemini;
 
+        /// <summary>
+        /// Gemini generateContent を用いて通常チャットを送信する。
+        /// </summary>
         public async Task<RawChatResult> SendChatAsync(
             ModelSpec model,
             IReadOnlyList<Message> messages,
@@ -203,6 +207,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// Gemini 用の UnityWebRequest を生成する。
+        /// </summary>
         private static UnityWebRequest BuildRequest(string endpoint, string apiKey, string jsonBody)
         {
             var req = new UnityWebRequest(endpoint, "POST")
@@ -215,12 +222,18 @@ namespace UnityLLMAPI.Chat
             return req;
         }
 
+        /// <summary>
+        /// ボディに追加パラメータをマージする。
+        /// </summary>
         private static void MergeAdditionalBody(Dictionary<string, object> body, Dictionary<string, object> additional)
         {
             if (body == null || additional == null) return;
             foreach (var kv in additional) body[kv.Key] = kv.Value;
         }
 
+        /// <summary>
+        /// Function Calling 用の宣言を Gemini フォーマットで追加する。
+        /// </summary>
         private static void AddFunctionDeclarations(Dictionary<string, object> body, IReadOnlyList<IJsonSchema> functions)
         {
             if (functions == null || functions.Count == 0) return;
@@ -257,6 +270,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// 画像生成リクエストに必要な generationConfig を補完する。
+        /// </summary>
         private static void EnsureImageGenerationConfig(Dictionary<string, object> body)
         {
             if (body == null) return;
@@ -267,6 +283,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// JSON をパースして JObject を返す。失敗時は null。
+        /// </summary>
         private static JObject TryParse(string rawJson)
         {
             if (string.IsNullOrEmpty(rawJson)) return null;
@@ -280,6 +299,9 @@ namespace UnityLLMAPI.Chat
             }
         }
 
+        /// <summary>
+        /// UnityWebRequest のレスポンスから RawChatResult を生成する。
+        /// </summary>
         private static RawChatResult BuildRawChatResult(ModelSpec model, UnityWebRequest req)
         {
             var rawJson = req.downloadHandler?.text;
@@ -295,6 +317,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// 即時失敗用の RawChatResult を作るヘルパー。
+        /// </summary>
         private static RawChatResult FailureChatResult(ModelSpec model, string message)
         {
             return new RawChatResult
@@ -309,6 +334,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// 画像生成が未対応の場合の失敗レスポンスを生成する。
+        /// </summary>
         private static RawImageResult FailureImageResult(ModelSpec model, string message)
         {
             return new RawImageResult
@@ -323,6 +351,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// 埋め込み生成が未対応の場合の失敗レスポンスを生成する。
+        /// </summary>
         private static RawEmbeddingResult FailureEmbeddingResult(ModelSpec model, string message)
         {
             return new RawEmbeddingResult
@@ -337,6 +368,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// 画像レスポンスから生成された画像リストを抽出する。
+        /// </summary>
         private static List<GeneratedImage> ExtractImages(JObject root)
         {
             var images = new List<GeneratedImage>();
@@ -367,6 +401,9 @@ namespace UnityLLMAPI.Chat
             return images;
         }
 
+        /// <summary>
+        /// 単一画像トークンをパースし GeneratedImage として追加する。
+        /// </summary>
         private static void AppendImage(ICollection<GeneratedImage> images, JToken imageNode)
         {
             if (imageNode == null) return;
@@ -387,6 +424,9 @@ namespace UnityLLMAPI.Chat
             }
         }
 
+        /// <summary>
+        /// 構造化応答用の JSON Schema を解釈して返す。
+        /// </summary>
         private static object ParseSchema(string jsonSchema)
         {
             if (string.IsNullOrEmpty(jsonSchema)) return new Dictionary<string, object> { { "type", "object" } };

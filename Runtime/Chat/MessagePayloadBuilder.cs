@@ -7,6 +7,9 @@ namespace UnityLLMAPI.Chat
 {
     internal static class MessagePayloadBuilder
     {
+        /// <summary>
+        /// OpenAI 形式の messages 配列を構築する。
+        /// </summary>
         public static List<Dictionary<string, object>> BuildOpenAiMessages(List<Message> messages)
         {
             var result = new List<Dictionary<string, object>>();
@@ -36,6 +39,9 @@ namespace UnityLLMAPI.Chat
             return result;
         }
 
+        /// <summary>
+        /// OpenAI Chat API 用の content.parts を構築する。
+        /// </summary>
         public static List<Dictionary<string, object>> BuildOpenAiContentParts(Message message)
         {
             var parts = new List<Dictionary<string, object>>();
@@ -80,6 +86,9 @@ namespace UnityLLMAPI.Chat
             return parts;
         }
 
+        /// <summary>
+        /// Gemini 形式の contents 配列を構築する。
+        /// </summary>
         public static List<Dictionary<string, object>> BuildGeminiContents(List<Message> messages)
         {
             var contents = new List<Dictionary<string, object>>();
@@ -105,6 +114,9 @@ namespace UnityLLMAPI.Chat
             return contents;
         }
 
+        /// <summary>
+        /// Gemini 用の parts を構築する。
+        /// </summary>
         public static List<object> BuildGeminiParts(Message message)
         {
             var parts = new List<object>();
@@ -166,6 +178,9 @@ namespace UnityLLMAPI.Chat
             return parts;
         }
 
+        /// <summary>
+        /// Gemini function_declarations.parameters の互換性を保つためのサニタイズ。
+        /// </summary>
         public static object SanitizeGeminiParameters(object parameters)
         {
             try
@@ -201,6 +216,9 @@ namespace UnityLLMAPI.Chat
             return parameters;
         }
 
+        /// <summary>
+        /// MessageContent 内の画像バイト列を data:URL に変換する。
+        /// </summary>
         private static string ConvertImageContentToDataUrl(MessageContent part)
         {
             if (part == null || !part.HasData) return string.Empty;
@@ -208,6 +226,9 @@ namespace UnityLLMAPI.Chat
             return $"data:{mime};base64,{Convert.ToBase64String(part.data)}";
         }
 
+        /// <summary>
+        /// data:URL 形式を解析し、MIME と base64 本体を取り出す。
+        /// </summary>
         private static bool TryParseDataUrl(string uri, out string mimeType, out string base64Data)
         {
             mimeType = null;

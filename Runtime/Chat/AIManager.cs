@@ -211,12 +211,9 @@ public class FunctionSchema<T> : RealTimeJsonSchema<T> where T : SchemaParameter
 #region AIManager
 
 /// <summary>
-/// AI API 呼び出し用シングルトンマネージャ
-/// 会話履歴（Message のリスト）を元にリクエストを構築し、
-/// ・通常応答
-/// ・構造化出力（自動生成した JSON Schema を利用）
-/// ・Function Calling（型安全な IFunction リストを渡して自動実行）
-/// を実現します。
+/// AI API 呼び出しの入口となるクラス。
+/// モデル能力の検証 → ProviderClient へのルーティング → 共通パース という流れで処理する。
+/// 公開 API は従来のメソッド名を維持しつつ内部実装のみ差し替えている。
 /// </summary>
 public static class AIManager
 {
@@ -227,14 +224,21 @@ public static class AIManager
     internal static void RegisterBehaviour(AIManagerBehaviour behaviour) => ApiKeyResolver.RegisterBehaviour(behaviour);
     internal static void UnregisterBehaviour(AIManagerBehaviour behaviour) => ApiKeyResolver.UnregisterBehaviour(behaviour);
 
+    /// <summary>
+    /// モデル種別に対応するメタ情報を取得するラッパー。
+    /// </summary>
     public static ModelSpec GetModelSpec(AIModelType modelType) => ModelRegistry.Get(modelType);
 
     #region Helpers
+    /// <summary>
+    /// ProviderClient へ渡すチャットオプションを作成する。
+    /// </summary>
     private static ChatRequestOptions BuildChatOptions(
         Dictionary<string, object> initBody,
         int timeoutSeconds,
         IReadOnlyList<UnityLLMAPI.Schema.IJsonSchema> functions = null)
     {
+        // ProviderClient へ渡すオプションをまとめて生成する
         return new ChatRequestOptions
         {
             AdditionalBody = initBody ?? new Dictionary<string, object>(),
@@ -243,14 +247,21 @@ public static class AIManager
         };
     }
 
+    /// <summary>
+    /// モデルが必要な機能を持つか検証し、非対応なら例外を投げる。
+    /// </summary>
     private static void EnsureCapability(ModelSpec spec, AICapabilities required)
     {
+        // モデルが要求された機能をサポートしているか事前チェック
         if (!spec.Capabilities.HasFlag(required))
         {
             throw new NotSupportedException($"{spec.ModelType} does not support {required} (Capabilities: {spec.Capabilities})");
         }
     }
 
+    /// <summary>
+    /// チャットレスポンスが失敗していないか判定し、失敗ならログを出す。
+    /// </summary>
     private static bool IsFailed(RawChatResult raw, ModelSpec spec)
     {
         if (raw == null)
@@ -266,6 +277,9 @@ public static class AIManager
         return false;
     }
 
+    /// <summary>
+    /// 画像生成レスポンスが失敗していないか判定し、失敗ならログを出す。
+    /// </summary>
     private static bool IsFailed(RawImageResult raw, ModelSpec spec)
     {
         if (raw == null)
@@ -280,8 +294,29 @@ public static class AIManager
         }
         return false;
     }
+
+    /// <summary>
+    /// 埋め込みレスポンスが失敗していないか判定し、失敗ならログを出す。
+    /// </summary>
+    private static bool IsFailed(RawEmbeddingResult raw, ModelSpec spec)
+    {
+        if (raw == null)
+        {
+            UnityEngine.Debug.LogError($"No embedding response received from provider for {spec.ModelType}.");
+            return true;
+        }
+        if (!raw.IsSuccess)
+        {
+            UnityEngine.Debug.LogError($"Embedding request failed for {spec.ModelId}: {raw.ErrorMessage ?? "unknown error"}");
+            return true;
+        }
+        return false;
+    }
     #endregion
 
+    /// <summary>
+    /// 通常チャットを送信し、アシスタントからのテキスト応答を返す。
+    /// </summary>
     public static async System.Threading.Tasks.Task<string> SendMessageAsync(
         List<Message> messages,
         AIModelType model,
@@ -292,6 +327,7 @@ public static class AIManager
         var spec = ModelRegistry.Get(model);
         EnsureCapability(spec, AICapabilities.TextChat);
 
+        // ModelSpec -> ProviderClient にルーティングして実行
         var provider = ProviderRegistry.Get(spec.Provider);
         var options = BuildChatOptions(initBody, timeoutSeconds);
         var raw = await provider.SendChatAsync(spec, messages, options, cancellationToken);
@@ -300,6 +336,9 @@ public static class AIManager
         return ChatResultParser.ExtractAssistantMessage(raw);
     }
 
+    /// <summary>
+    /// JSON Schema ベースの構造化応答を型 T にデシリアライズして返す。
+    /// </summary>
     public static async System.Threading.Tasks.Task<T> SendStructuredMessageAsync<T>(
         List<Message> messages,
         AIModelType model,
@@ -323,6 +362,9 @@ public static class AIManager
         }
     }
 
+    /// <summary>
+    /// 既存インスタンスに対し構造化応答の内容を上書きする。
+    /// </summary>
     public static async System.Threading.Tasks.Task SendStructuredMessageAsync<T>(
         T targetInstance,
         List<Message> messages,
@@ -340,6 +382,9 @@ public static class AIManager
         }
     }
 
+    /// <summary>
+    /// RealTimeJsonSchema を用いた構造化応答を取得し、値をパースして返す。
+    /// </summary>
     public static async System.Threading.Tasks.Task<UnityLLMAPI.Schema.IJsonSchema> SendStructuredMessageWithRealTimeSchemaAsync(
         List<Message> messages,
         UnityLLMAPI.Schema.IJsonSchema schema,
@@ -359,6 +404,9 @@ public static class AIManager
         return null;
     }
 
+    /// <summary>
+    /// 任意の JSON Schema を直接指定して構造化応答を Dictionary として受け取る。
+    /// </summary>
     public static async System.Threading.Tasks.Task<Dictionary<string, object>> SendStructuredMessageWithSchemaAsync(
         List<Message> messages,
         Dictionary<string, object> jsonSchema,
@@ -370,6 +418,7 @@ public static class AIManager
         var spec = ModelRegistry.Get(model);
         EnsureCapability(spec, AICapabilities.JsonSchema);
 
+        // 構造化出力に対応した ProviderClient に委譲
         var schemaJson = Newtonsoft.Json.JsonConvert.SerializeObject(jsonSchema ?? new Dictionary<string, object>());
         var raw = await SendStructuredRawAsync(messages, spec, schemaJson, initBody, cancellationToken, timeoutSeconds);
         if (IsFailed(raw, spec)) return null;
@@ -377,6 +426,9 @@ public static class AIManager
         return ChatResultParser.ExtractJsonDictionary(raw);
     }
 
+    /// <summary>
+    /// Function Calling 対応の会話を送り、実行すべき関数パラメータをパースして返す。
+    /// </summary>
     public static async System.Threading.Tasks.Task<UnityLLMAPI.Schema.IJsonSchema> SendFunctionCallMessageAsync(
         List<Message> messages,
         List<UnityLLMAPI.Schema.IJsonSchema> functions,
@@ -393,6 +445,7 @@ public static class AIManager
         var spec = ModelRegistry.Get(model);
         EnsureCapability(spec, AICapabilities.FunctionCalling);
 
+        // Function Calling は追加オプションとして functions を渡す
         var provider = ProviderRegistry.Get(spec.Provider);
         var options = BuildChatOptions(initBody, timeoutSeconds, functions);
         var raw = await provider.SendChatAsync(spec, messages, options, cancellationToken);
@@ -401,6 +454,9 @@ public static class AIManager
         return ChatResultParser.ExtractFunctionCall(raw, functions);
     }
 
+    /// <summary>
+    /// 画像生成に対応したモデルへメッセージを送り、生成画像セットを取得する。
+    /// </summary>
     public static async System.Threading.Tasks.Task<ImageGenerationResponse> GenerateImagesAsync(
         List<Message> messages,
         AIModelType model = AIModelType.Gemini25FlashImagePreview,
@@ -430,6 +486,9 @@ public static class AIManager
         };
     }
 
+    /// <summary>
+    /// 画像生成のうち最初の画像のみを簡便に取得するラッパー。
+    /// </summary>
     public static async System.Threading.Tasks.Task<GeneratedImage> GenerateImageAsync(
         List<Message> messages,
         AIModelType model = AIModelType.Gemini25FlashImagePreview,
@@ -442,6 +501,9 @@ public static class AIManager
     }
 
     #region Internal helpers
+    /// <summary>
+    /// 構造化応答を要求するチャットを送り、生テキストとして取得する。
+    /// </summary>
     private static async System.Threading.Tasks.Task<string> SendStructuredMessageAsyncCore<T>(
         List<Message> messages,
         AIModelType model,
@@ -460,6 +522,9 @@ public static class AIManager
         return ChatResultParser.ExtractAssistantMessage(raw);
     }
 
+    /// <summary>
+    /// 構造化チャットを送信し RawChatResult を受け取る共通ルート。
+    /// </summary>
     private static async System.Threading.Tasks.Task<RawChatResult> SendStructuredRawAsync(
         List<Message> messages,
         ModelSpec spec,

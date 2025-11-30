@@ -12,6 +12,7 @@ using UnityLLMAPI.Schema;
 
 namespace UnityLLMAPI.Chat
 {
+    // OpenAI 向けの HTTP 実装をまとめた ProviderClient
     internal sealed class OpenAIClient : IProviderClient
     {
         private const string ChatEndpoint = "https://api.openai.com/v1/chat/completions";
@@ -19,6 +20,9 @@ namespace UnityLLMAPI.Chat
 
         public AIProvider Provider => AIProvider.OpenAI;
 
+        /// <summary>
+        /// OpenAI Chat Completions で通常チャットを送信する。
+        /// </summary>
         public async Task<RawChatResult> SendChatAsync(
             ModelSpec model,
             IReadOnlyList<Message> messages,
@@ -95,6 +99,9 @@ namespace UnityLLMAPI.Chat
             throw new System.NotSupportedException("OpenAI image generation is not implemented in this client.");
         }
 
+        /// <summary>
+        /// OpenAI Embeddings API を呼び出しベクトルを取得する。
+        /// </summary>
         public async Task<RawEmbeddingResult> CreateEmbeddingAsync(
             ModelSpec model,
             IReadOnlyList<string> texts,
@@ -160,6 +167,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// OpenAI 向けの UnityWebRequest を生成する。
+        /// </summary>
         private static UnityWebRequest BuildRequest(string endpoint, string apiKey, string jsonBody)
         {
             var bodyBytes = System.Text.Encoding.UTF8.GetBytes(jsonBody);
@@ -173,6 +183,9 @@ namespace UnityLLMAPI.Chat
             return req;
         }
 
+        /// <summary>
+        /// UnityWebRequest から共通の RawChatResult を生成する。
+        /// </summary>
         private static RawChatResult BuildRawChatResult(ModelSpec model, UnityWebRequest req)
         {
             var rawJson = req.downloadHandler?.text;
@@ -188,6 +201,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// 追加パラメータをボディへマージする。
+        /// </summary>
         private static void MergeAdditionalBody(Dictionary<string, object> body, Dictionary<string, object> additional)
         {
             if (body == null || additional == null) return;
@@ -197,6 +213,9 @@ namespace UnityLLMAPI.Chat
             }
         }
 
+        /// <summary>
+        /// Function Calling 用のパラメータを OpenAI ボディに追加する。
+        /// </summary>
         private static void AddFunctions(Dictionary<string, object> body, IReadOnlyList<IJsonSchema> functions)
         {
             if (functions == null || functions.Count == 0) return;
@@ -204,6 +223,9 @@ namespace UnityLLMAPI.Chat
             body["function_call"] = "auto";
         }
 
+        /// <summary>
+        /// JSON をパースして JObject を返す。失敗時は null。
+        /// </summary>
         private static JObject TryParse(string rawJson)
         {
             if (string.IsNullOrEmpty(rawJson)) return null;

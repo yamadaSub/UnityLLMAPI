@@ -1,101 +1,86 @@
-UnityLLMAPI
+﻿UnityLLMAPI
 ===========
 
-Unity から大扁ELLM / Embedding API を呼び出すため�E支援パッケージです、E 
-API キーの取得、リクエスト生成、JSON Schema ベ�Eスの構造化応答、E��数呼び出し、Gemini 画像�E出力、埋め込みベクトル計算までを同じコード体系で扱えます、E
+Unity から LLM / Embedding API を呼び出すための支援パッケージです。
+API キーの取得からリクエスト生成、JSON Schema ベースの構造化応答、Function Calling、Gemini 画像生成、埋め込みベクトル計算までを同じコード体系で扱えます。
 
-本ドキュメントではセチE��アチE�Eから主要な利用パターン、サンプルコード�E場所までを俯瞰できるようにまとめてぁE��す、E
+この README ではセットアップ手順と主要な利用パターンを簡潔にまとめます。
 
 ---
 
-セチE��アチE�E
+セットアップ
 ------------
-1. **API キーを取得して環墁E��登録**
-   - 利用可能なキー: `OPENAI_API_KEY` / `GROK_API_KEY` また�E `XAI_API_KEY` / `GOOGLE_API_KEY`
-   - Windows (PowerShell):\
-     `Set-Item -Path Env:OPENAI_API_KEY -Value "<your_key>"`
-   - macOS / Linux (bash / zsh):\
-     `export OPENAI_API_KEY=<your_key>`
-2. **Unity Editor でのキー設宁E(任愁E**
-   - メニュー `Tools > UnityLLMAPI > Configure API Keys` から EditorUserSettings に保存可能  
-     �E�暗号化されずプロジェクト外に保存されるため、VCS へはコミット不要です！E
-3. **ランタイム用のキー解決頁E��E*
-   - `AIManagerBehaviour` (ヒエラルキー上�Eコンポ�EネンチE
+1. **API キーを取得して環境変数に登録**
+   - 利用可能なキー: `OPENAI_API_KEY` / `GROK_API_KEY` または `XAI_API_KEY` / `GOOGLE_API_KEY`
+   - Windows (PowerShell): `Set-Item -Path Env:OPENAI_API_KEY -Value "<your_key>"`
+   - macOS / Linux (bash / zsh): `export OPENAI_API_KEY=<your_key>`
+2. **Unity Editor でのキー設定 (任意)**
+   - メニュー `Tools > UnityLLMAPI > Configure API Keys` から EditorUserSettings に保存可能
+   - 暗号化されずプロジェクト外に保存されるため、VCS へはコミット不要です
+3. **ランタイムでのキー解決順**
+   - `AIManagerBehaviour` (ヒエラルキー上のコンポーネント)
    - EditorUserSettings (`UnityLLMAPI.OPENAI_API_KEY` など)
-   - 環墁E��数�E�Erocess ↁEUser ↁEMachine�E�E
+   - 環境変数 (Process → User → Machine)
 
 ---
 
-全体�Eワークフロー
+全体ワークフロー
 ------------------
-1. **Message / MessageContent を絁E��立てめE*  
-   - チE��スト�E `Message.content` また�E `MessageContent.FromText()`  
-   - 画像�E `MessageContent.FromImage()`�E�Eexture から自動で PNG 化）また�E `FromImageData` / `FromImageUrl`
-2. **AIManager / EmbeddingManager の API を呼ぶ**  
+1. **Message / MessageContent を組み立てる**
+   - テキスト: `Message.content` または `MessageContent.FromText()`
+   - 画像: `MessageContent.FromImage()` (Texture から PNG 化) / `FromImageData` / `FromImageUrl`
+2. **AIManager / EmbeddingManager の API を呼ぶ**
    - `SendMessageAsync`、`SendStructuredMessageAsync`、`SendFunctionCallMessageAsync`、`GenerateImagesAsync` など
-3. **レスポンスを�E琁E��めE*  
-   - チE��スト応答�E string、構造化応答�E任意�E型、Function 呼び出し�E `IJsonSchema`、画像生成�E `ImageGenerationResponse`
-4. **忁E��に応じて補助ユーチE��リチE��を活用**  
-   - `TextureEncodingUtility.TryGetPngBytes`�E�Texture→PNG の安�Eな変換  
-   - `UnityWebRequestUtils.SendAsync`�E��E API 呼び出しで共通化した await パターン
+3. **レスポンスを受け取る**
+   - テキスト応答: `string`
+   - 構造化応答: 任意の型 or `Dictionary<string, object>`
+   - Function Calling: `IJsonSchema`
+   - 画像生成: `ImageGenerationResponse`
+4. **必要に応じて補助ユーティリティを活用**
+   - `TextureEncodingUtility.TryGetPngBytes` で Texture→PNG 変換
+   - `UnityWebRequestUtils.SendAsync` で共通の await パターンを利用
 
 ---
 
-主要機�EとポインチE
+主な機能とポイント
 ------------------
-### 1. チE��スチE/ マルチモーダルチャチE��
+### 1. テキスト / マルチモーダルチャット
 ```csharp
 var messages = new List<Message>
 {
-    new Message { role = MessageRole.System, content = "あなた�E Unity エンジニアのアシスタントです、E },
-    new Message { role = MessageRole.User,   content = "RuntimeInitializeOnLoadMethod の使ぁE��を教えて、E }
+    new Message { role = MessageRole.System, content = "あなたは Unity エンジニアのアシスタントです" },
+    new Message { role = MessageRole.User,   content = "RuntimeInitializeOnLoadMethod の使い方を教えて" }
 };
 var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini25Flash);
 ```
 
-### 2. JSON Schema ベ�Eスの構造化応筁E
+### 2. JSON Schema ベースの構造化応答
 ```csharp
 var invoice = await AIManager.SendStructuredMessageAsync<Invoice>(messages, AIModelType.GPT4o);
 ```
-持E��した型に合わせて JSON Schema を�E動生成し、応答をチE��リアライズします、E
-`[Description]`, `[Range]`, `[RegularExpression]` などの属性を使用して、より詳細な制紁E��定義できます、E
+指定した型に合わせて JSON Schema を自動生成し、応答をデシリアライズします。
+`[Description]`, `[Range]`, `[RegularExpression]` などの属性で制約を定義できます。
 
 ```csharp
 public class Invoice
 {
-    [Description("請求書番号 (侁E INV-001)")]
+    [Description("請求書番号 (例: INV-001)")]
     [RegularExpression(@"^INV-\d{3}$")]
     public string InvoiceNumber;
 
-    [Description("合計��顁E)]
+    [Description("合計金額")]
     [Range(0, 1000000)]
     public double TotalAmount;
 }
 ```
-### 補足: 独自のバリチE�Eション属性につぁE��
-`[SchemaRange]` めE`[SchemaRegularExpression]` は、LLM に渡ぁE**JSON Schema の制紁E��件 (`minimum`, `maximum`, `pattern`) を生成するためE* に使用します、E
-これにより、LLM が生成する構造化データの値の篁E��めE��ォーマットを制御できます、E
-
-**使用例と生�EされめESchema:**
-```csharp
-public class UserProfile
-{
-    [Description("年齢")]
-    [SchemaRange(0, 150)] // JSON Schema: "minimum": 0, "maximum": 150 に変換されまぁE
-    public int Age;
-
-    [Description("ユーザーID (英小文字�Eみ)")]
-    [SchemaRegularExpression(@"^[a-z]+$")] // JSON Schema: "pattern": "^[a-z]+$" に変換されまぁE
-    public string UserId;
-}
-```
+#### 補足: 独自のバリデーション属性
+`[SchemaRange]` や `[SchemaRegularExpression]` は JSON Schema の `minimum` / `maximum` / `pattern` を LLM に伝えるために利用できます。
 
 ### 3. RealTime Schema / Function Calling
-- `SendStructuredMessageWithRealTimeSchemaAsync`�E�`RealTimeJsonSchema` の値を�E度更新
-  - `SchemaParameter` に `Min`, `Max`, `Pattern` を設定することで、Inspector 上で制紁E��定義可能です、E
-- `SendFunctionCallMessageAsync`�E�LLM からの関数呼び出し結果めE`IJsonSchema` として取征E
+- `SendStructuredMessageWithRealTimeSchemaAsync` で `RealTimeJsonSchema` の値を随時更新
+- `SendFunctionCallMessageAsync` で LLM からの関数呼び出し結果を `IJsonSchema` として取得
 
-### 4. 画像�E出劁E(Gemini 2.5 Flash Image Preview / Gemini 3 Pro Image Preview)
+### 4. 画像生成 (Gemini 2.5 Flash Image Preview / Gemini 3 Pro Image Preview)
 ```csharp
 var editMessages = new List<Message>
 {
@@ -104,8 +89,8 @@ var editMessages = new List<Message>
         role = MessageRole.User,
         parts = new List<MessageContent>
         {
-            MessageContent.FromText("水彩画風にしてください、E),
-            MessageContent.FromImage(texture) // Texture2D から自勁EPNG 変換
+            MessageContent.FromText("水彩画風にしてください"),
+            MessageContent.FromImage(texture) // Texture2D から自動で PNG 変換
         }
     }
 };
@@ -116,56 +101,55 @@ var images = await AIManager.GenerateImagesAsync(editMessages);
 ```csharp
 var embedding = await EmbeddingManager.CreateEmbeddingAsync(
     "Unity loves C#",
-    EmbeddingModelType.Gemini01_1536); // Gemini 01 の出力次允E�� 1,536 に持E��E
+    EmbeddingModelType.Gemini01_1536); // Gemini 01 の出力次元 1,536
 var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpusEmbeddings);
 ```
 
 ---
 
-サンプルコーチE
+サンプルコード
 --------------
-| ファイル | 冁E�� |
+| ファイル | 内容 |
 | --- | --- |
-| `Samples~/Example/ExampleUsage.cs` | チE��ストチャチE�� / 構造化応筁E/ RealTime Schema / Function Calling |
-| `Samples~/Example/VisionSamples.cs` | Gemini 画像編雁E�EVision モチE��での画像解极E|
-| `Samples~/Example/EmbeddingSample.cs` | Embedding の線形演算とコサイン類似度計箁E|
+| `Samples~/Example/ExampleUsage.cs` | テキストチャット / 構造化応答 / RealTime Schema / Function Calling |
+| `Samples~/Example/VisionSamples.cs` | Gemini 画像編集と Vision モデルでの画像解析 |
+| `Samples~/Example/EmbeddingSample.cs` | Embedding の線形演算とコサイン類似度計算 |
 
-どのサンプルめEMonoBehaviour をシーンに配置し、インスペクターの ContextMenu から実行できます、E 
-画像系は `Application.persistentDataPath` に生�E結果を保存します、E
+どのサンプルも MonoBehaviour をシーンに配置し、インスペクターの ContextMenu から実行できます。画像系は `Application.persistentDataPath` に生成結果を保存します。
 
 ---
 
-API リファレンス�E�抜粋！E
+API クイックリファレンス
 ------------------------
 ### Message / MessageContent
-- `Message.content`�E�テキスト�Eみの簡易�E劁E
-- `Message.parts`�E�`MessageContent` のリスト。テキスト�E画像を混在させる場合�Eこちらを使用
-- `MessageContent.FromImage(Texture texture, string mime = "image/png")`�E�Texture めEPNG に変換して画像パートを生�E�E�非 readable も�E動対応！E
-- `MessageContent.FromImageData(byte[] data, string mime)`�E�既存�Eバイト�Eから生�E
-- `MessageContent.FromImageUrl(string url)`�E�URL 経由で画像を参�E
+- `Message.content`: テキストのみの簡易入力
+- `Message.parts`: `MessageContent` のリスト。テキストと画像を混在させる場合はこちら
+- `MessageContent.FromImage(Texture texture, string mime = "image/png")`: Texture から PNG に変換して画像パートを生成（非 readable も自動対応）
+- `MessageContent.FromImageData(byte[] data, string mime)`: 既存バイト列から生成
+- `MessageContent.FromImageUrl(string url)`: URL 経由で画像を参照
 
 ### AIManager
-- `SendMessageAsync`�E�通常のチャチE��
-- `SendStructuredMessageAsync<T>`�E�構造化レスポンス�E�ESON Schema�E�E
-- `SendStructuredMessageWithRealTimeSchemaAsync`�E�RealTimeJsonSchema の値更新
-- `SendFunctionCallMessageAsync`�E�LLM からの関数呼び出し結果を受け取り、`IJsonSchema` を返す
-- `GenerateImagesAsync` / `GenerateImageAsync`�E�Gemini 画像生戁E
+- `SendMessageAsync`: 通常チャット
+- `SendStructuredMessageAsync<T>`: 構造化レスポンス (JSON Schema 自動生成)
+- `SendStructuredMessageWithRealTimeSchemaAsync`: RealTimeJsonSchema の値更新
+- `SendFunctionCallMessageAsync`: LLM からの関数呼び出し結果を `IJsonSchema` で受け取る
+- `GenerateImagesAsync` / `GenerateImageAsync`: Gemini 画像生成
 
 ### EmbeddingManager
-- `CreateEmbeddingAsync(string text, EmbeddingModelType model = EmbeddingModelType.Gemini01)`�E�OpenAI / Gemini の埋め込みを取得！Eemini 01 はモチE��種別で次允E��を選択！E
-- `EmbeddingModelType.Gemini01 / Gemini01_1536 / Gemini01_768`�E�Gemini Embedding 001 の出力次允E��プション
-- `RankByCosine`�E�褁E��の埋め込みに対してコサイン類似度でランク付け
+- `CreateEmbeddingAsync(string text, EmbeddingModelType model = EmbeddingModelType.Gemini01)`: OpenAI / Gemini の埋め込みを取得
+- `EmbeddingModelType.Gemini01 / Gemini01_1536 / Gemini01_768`: Gemini Embedding 001 の出力次元オプション
+- `RankByCosine`: 複数の埋め込みに対してコサイン類似度でランク付け
 
 ---
 
 補足・注意点
 ------------
-- 画像生成ではチE��ォルトで PNG を扱ぁE��す、EPEG 等が忁E��な場合�E `initBody` で `"generationConfig"` を追加し、Gemini 側の仕様に合わせてください、E
-- GPU 読み戻し�E環墁E��よってコストが大きくなる場合があります。頻繁に呼び出す場合�EチE��スチャをあらかじめ readable にしておくことを推奨します、E
-- API キーが設定されてぁE��ぁE��合�Eエラーログでヒントを表示します。まず�E `AIManagerBehaviour` の設定状態を確認してください、E
+- 画像生成はデフォルトで PNG。JPEG などが必要な場合は `initBody` で `generationConfig` を追加し、Gemini 側の仕様に合わせてください。
+- GPU 読み戻しは環境によってコストが大きくなる場合があります。頻繁に呼び出す場合はテクスチャをあらかじめ readable にしておくことを推奨します。
+- API キーが未設定の場合はエラーログでヒントを表示します。まず `AIManagerBehaviour` の設定状態を確認してください。
 
 ---
 
 ライセンス
 ----------
-本パッケージは Unity プロジェクト�Eでの利用を想定してぁE��す。詳細はリポジトリのライセンスファイルをご覧ください、E
+本パッケージは Unity プロジェクトでの利用を想定しています。詳細は同梱のライセンスファイルをご覧ください。

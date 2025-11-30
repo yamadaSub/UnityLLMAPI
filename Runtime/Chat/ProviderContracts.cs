@@ -7,66 +7,78 @@ using UnityLLMAPI.Schema;
 
 namespace UnityLLMAPI.Chat
 {
-public sealed class ChatRequestOptions
-{
-    public static ChatRequestOptions Default => new ChatRequestOptions();
+    // チャットリクエストに共通で使うオプション集
+    public sealed class ChatRequestOptions
+    {
+        public static ChatRequestOptions Default => new ChatRequestOptions();
 
-    public Dictionary<string, object> AdditionalBody { get; set; } = new Dictionary<string, object>();
-    public IReadOnlyList<IJsonSchema> Functions { get; set; }
-    public int TimeoutSeconds { get; set; } = -1;
-}
+        public Dictionary<string, object> AdditionalBody { get; set; } = new Dictionary<string, object>();
+        public IReadOnlyList<IJsonSchema> Functions { get; set; }
+        public int TimeoutSeconds { get; set; } = -1;
+    }
 
-public sealed class ImageGenerationRequest
-{
-    public List<Message> Messages { get; set; } = new List<Message>();
-    public Dictionary<string, object> AdditionalBody { get; set; } = new Dictionary<string, object>();
-    public int TimeoutSeconds { get; set; } = -1;
-}
+    // 画像生成に必要な入力パッケージ
+    public sealed class ImageGenerationRequest
+    {
+        public List<Message> Messages { get; set; } = new List<Message>();
+        public Dictionary<string, object> AdditionalBody { get; set; } = new Dictionary<string, object>();
+        public int TimeoutSeconds { get; set; } = -1;
+    }
 
-public sealed class RawChatResult
-{
-    public AIProvider Provider { get; set; }
-    public string ModelId { get; set; }
-    public bool IsSuccess { get; set; }
-    public long StatusCode { get; set; }
-    public string ErrorMessage { get; set; }
-    public string RawJson { get; set; }
-    public JObject Body { get; set; }
-}
+    // Provider から受け取ったチャットレスポンスの生データ
+    public sealed class RawChatResult
+    {
+        public AIProvider Provider { get; set; }
+        public string ModelId { get; set; }
+        public bool IsSuccess { get; set; }
+        public long StatusCode { get; set; }
+        public string ErrorMessage { get; set; }
+        public string RawJson { get; set; }
+        public JObject Body { get; set; }
+    }
 
-public sealed class RawImageResult
-{
-    public AIProvider Provider { get; set; }
-    public string ModelId { get; set; }
-    public bool IsSuccess { get; set; }
-    public long StatusCode { get; set; }
-    public string ErrorMessage { get; set; }
-    public string RawJson { get; set; }
-    public List<GeneratedImage> Images { get; set; } = new List<GeneratedImage>();
-    public string PromptFeedback { get; set; }
-}
+    // Provider から受け取った画像生成レスポンスの生データ
+    public sealed class RawImageResult
+    {
+        public AIProvider Provider { get; set; }
+        public string ModelId { get; set; }
+        public bool IsSuccess { get; set; }
+        public long StatusCode { get; set; }
+        public string ErrorMessage { get; set; }
+        public string RawJson { get; set; }
+        public List<GeneratedImage> Images { get; set; } = new List<GeneratedImage>();
+        public string PromptFeedback { get; set; }
+    }
 
-public sealed class RawEmbeddingResult
-{
-    public AIProvider Provider { get; set; }
-    public string ModelId { get; set; }
-    public bool IsSuccess { get; set; }
-    public long StatusCode { get; set; }
-    public string ErrorMessage { get; set; }
-    public string RawJson { get; set; }
-    public List<SerializableEmbedding> Embeddings { get; set; } = new List<SerializableEmbedding>();
-}
+    // Provider から受け取った埋め込みベクトルの生データ
+    public sealed class RawEmbeddingResult
+    {
+        public AIProvider Provider { get; set; }
+        public string ModelId { get; set; }
+        public bool IsSuccess { get; set; }
+        public long StatusCode { get; set; }
+        public string ErrorMessage { get; set; }
+        public string RawJson { get; set; }
+        public List<SerializableEmbedding> Embeddings { get; set; } = new List<SerializableEmbedding>();
+    }
 
+    // Provider ごとの実装差分を吸収するインターフェース
     public interface IProviderClient
     {
         AIProvider Provider { get; }
 
+        /// <summary>
+        /// 通常チャットを送信し生レスポンスを返す。
+        /// </summary>
         Task<RawChatResult> SendChatAsync(
             ModelSpec model,
             IReadOnlyList<Message> messages,
             ChatRequestOptions options,
             CancellationToken ct);
 
+        /// <summary>
+        /// JSON Schema などの構造化出力を要求するチャットを送信する。
+        /// </summary>
         Task<RawChatResult> SendStructuredAsync(
             ModelSpec model,
             IReadOnlyList<Message> messages,
@@ -74,11 +86,17 @@ public sealed class RawEmbeddingResult
             ChatRequestOptions options,
             CancellationToken ct);
 
+        /// <summary>
+        /// 画像生成を要求し、生のレスポンスを返す。
+        /// </summary>
         Task<RawImageResult> GenerateImageAsync(
             ModelSpec model,
             ImageGenerationRequest request,
             CancellationToken ct);
 
+        /// <summary>
+        /// 埋め込みベクトルを生成し生レスポンスを返す。
+        /// </summary>
         Task<RawEmbeddingResult> CreateEmbeddingAsync(
             ModelSpec model,
             IReadOnlyList<string> texts,

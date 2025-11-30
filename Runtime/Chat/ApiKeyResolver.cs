@@ -3,6 +3,13 @@ using UnityEngine;
 
 namespace UnityLLMAPI.Chat
 {
+    /// <summary>
+    /// APIキーの解決を一元化するヘルパー。
+    /// 1) シーン上の AIManagerBehaviour
+    /// 2) (Editorのみ) EditorUserSettings
+    /// 3) 環境変数
+    /// の順で検索する。
+    /// </summary>
     internal static class ApiKeyResolver
     {
         private static AIManagerBehaviour cachedBehaviour;
@@ -15,12 +22,18 @@ namespace UnityLLMAPI.Chat
         private const string EditorIgnoreKeysConfig = "UnityLLMAPI.IGNORE_EDITOR_KEYS";
 #endif
 
+        /// <summary>
+        /// シーン上の Behaviour を登録する（優先的にキー解決に利用）。
+        /// </summary>
         public static void RegisterBehaviour(AIManagerBehaviour behaviour)
         {
             if (behaviour == null) return;
             cachedBehaviour = behaviour;
         }
 
+        /// <summary>
+        /// 登録済みの Behaviour を解除する。
+        /// </summary>
         public static void UnregisterBehaviour(AIManagerBehaviour behaviour)
         {
             if (cachedBehaviour == behaviour)
@@ -29,6 +42,9 @@ namespace UnityLLMAPI.Chat
             }
         }
 
+        /// <summary>
+        /// Provider に応じたキー未設定時のヒント文言を返す。
+        /// </summary>
         public static string GetRequiredEnvHint(ModelSpec spec)
         {
             switch (spec.Provider)
@@ -44,6 +60,9 @@ namespace UnityLLMAPI.Chat
             }
         }
 
+        /// <summary>
+        /// Behaviour → EditorUserSettings → 環境変数の順でキーを探索する。
+        /// </summary>
         private static string ResolveApiKey(Func<AIManagerBehaviour, string> behaviourSelector, string[] envKeys)
         {
             var behaviour = GetBehaviour();
@@ -87,6 +106,9 @@ namespace UnityLLMAPI.Chat
             return string.Empty;
         }
 
+        /// <summary>
+        /// シーン上から AIManagerBehaviour を検索（キャッシュ付き）。
+        /// </summary>
         private static AIManagerBehaviour GetBehaviour()
         {
             if (cachedBehaviour != null)
@@ -103,6 +125,9 @@ namespace UnityLLMAPI.Chat
         }
 
 #if UNITY_EDITOR
+        /// <summary>
+        /// EditorUserSettings に保存されたキーを読み出す（設定無ければ空文字）。
+        /// </summary>
         private static string GetEditorStoredKey(string envKey)
         {
             var editorKey = $"UnityLLMAPI.{envKey}";
@@ -127,6 +152,9 @@ namespace UnityLLMAPI.Chat
             return string.Empty;
         }
 
+        /// <summary>
+        /// EditorUserSettings に保存されたキーを利用するかどうかを判定する。
+        /// </summary>
         private static bool ShouldUseEditorStoredKeys()
         {
             try

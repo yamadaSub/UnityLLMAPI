@@ -3,6 +3,7 @@ using System.Collections.Generic;
 
 namespace UnityLLMAPI.Chat
 {
+    // モデルが対応する機能をビットフラグで管理する
     [Flags]
     public enum AICapabilities
     {
@@ -22,6 +23,7 @@ namespace UnityLLMAPI.Chat
         Gemini,
     }
 
+    // 各モデルのメタ情報を集約するデータコンテナ
     public sealed class ModelSpec
     {
         public AIModelType ModelType { get; set; }
@@ -31,6 +33,7 @@ namespace UnityLLMAPI.Chat
         public int MaxContextTokens { get; set; }
     }
 
+    // AIModelType -> ModelSpec を一元管理するレジストリ
     internal static class ModelRegistry
     {
         private static readonly Dictionary<AIModelType, ModelSpec> Models = new Dictionary<AIModelType, ModelSpec>
@@ -167,8 +170,9 @@ namespace UnityLLMAPI.Chat
                     Provider = AIProvider.Gemini,
                     ModelId = "gemini-2.5-flash-lite",
                     Capabilities = AICapabilities.TextChat
-                                   | AICapabilities.Vision
-                                   | AICapabilities.JsonSchema,
+                                    | AICapabilities.Vision
+                                    | AICapabilities.JsonSchema
+                                    | AICapabilities.FunctionCalling,
                     MaxContextTokens = 1048576,
                 }
             },
@@ -210,12 +214,18 @@ namespace UnityLLMAPI.Chat
             },
         };
 
+        /// <summary>
+        /// 指定モデル種別に対応する <see cref="ModelSpec"/> を取得する。
+        /// </summary>
         public static ModelSpec Get(AIModelType modelType)
         {
             if (Models.TryGetValue(modelType, out var spec)) return spec;
             throw new KeyNotFoundException($"ModelSpec not registered for {modelType}");
         }
 
+        /// <summary>
+        /// 登録済みの全モデルメタ情報を返す（読み取り専用）。
+        /// </summary>
         public static IReadOnlyDictionary<AIModelType, ModelSpec> GetAll() => Models;
     }
 }

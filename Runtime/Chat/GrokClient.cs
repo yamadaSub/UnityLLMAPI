@@ -11,12 +11,16 @@ using UnityLLMAPI.Schema;
 
 namespace UnityLLMAPI.Chat
 {
+    // Grok (x.ai) 向けの HTTP 実装をまとめた ProviderClient
     internal sealed class GrokClient : IProviderClient
     {
         private const string ChatEndpoint = "https://api.x.ai/v1/chat/completions";
 
         public AIProvider Provider => AIProvider.Grok;
 
+        /// <summary>
+        /// Grok のチャットエンドポイントへ通常チャットを送信する。
+        /// </summary>
         public async Task<RawChatResult> SendChatAsync(
             ModelSpec model,
             IReadOnlyList<Message> messages,
@@ -101,6 +105,12 @@ namespace UnityLLMAPI.Chat
             throw new System.NotSupportedException("Grok embeddings are not implemented.");
         }
 
+        /// <summary>
+        /// Grok 用の UnityWebRequest を生成する。
+        /// </summary>
+        /// <summary>
+        /// Grok 用の UnityWebRequest を生成する。
+        /// </summary>
         private static UnityWebRequest BuildRequest(string apiKey, string jsonBody)
         {
             var req = new UnityWebRequest(ChatEndpoint, "POST")
@@ -113,6 +123,9 @@ namespace UnityLLMAPI.Chat
             return req;
         }
 
+        /// <summary>
+        /// Function Calling 用の関数一覧をボディに追加する。
+        /// </summary>
         private static void AddFunctions(Dictionary<string, object> body, IReadOnlyList<IJsonSchema> functions)
         {
             if (functions == null || functions.Count == 0) return;
@@ -120,12 +133,18 @@ namespace UnityLLMAPI.Chat
             body["function_call"] = "auto";
         }
 
+        /// <summary>
+        /// 追加パラメータをボディへマージする。
+        /// </summary>
         private static void MergeAdditionalBody(Dictionary<string, object> body, Dictionary<string, object> additional)
         {
             if (body == null || additional == null) return;
             foreach (var kv in additional) body[kv.Key] = kv.Value;
         }
 
+        /// <summary>
+        /// 生 JSON を JObject にパースする。失敗時は null。
+        /// </summary>
         private static JObject TryParse(string rawJson)
         {
             if (string.IsNullOrEmpty(rawJson)) return null;
@@ -139,6 +158,9 @@ namespace UnityLLMAPI.Chat
             }
         }
 
+        /// <summary>
+        /// UnityWebRequest のレスポンスから RawChatResult を生成する。
+        /// </summary>
         private static RawChatResult BuildRawChatResult(ModelSpec model, UnityWebRequest req)
         {
             var rawJson = req.downloadHandler?.text;
@@ -154,6 +176,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// API キー不足などで即失敗を返すためのヘルパー。
+        /// </summary>
         private static RawChatResult FailureChatResult(ModelSpec model, string message)
         {
             return new RawChatResult

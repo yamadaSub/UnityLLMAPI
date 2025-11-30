@@ -8,6 +8,9 @@ namespace UnityLLMAPI.Chat
 {
     internal static class ChatResultParser
     {
+        /// <summary>
+        /// Provider に応じてアシスタントのテキスト部分を抽出する。
+        /// </summary>
         public static string ExtractAssistantMessage(RawChatResult raw)
         {
             if (raw?.Body == null) return null;
@@ -20,6 +23,9 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        /// <summary>
+        /// アシスタント応答を Dictionary としてパースする。
+        /// </summary>
         public static Dictionary<string, object> ExtractJsonDictionary(RawChatResult raw)
         {
             var text = ExtractAssistantMessage(raw);
@@ -34,6 +40,9 @@ namespace UnityLLMAPI.Chat
             }
         }
 
+        /// <summary>
+        /// Function Calling の結果をパースし、対応する IJsonSchema に値を入れて返す。
+        /// </summary>
         public static IJsonSchema ExtractFunctionCall(RawChatResult raw, IReadOnlyList<IJsonSchema> functions)
         {
             if (raw?.Body == null || functions == null || functions.Count == 0) return null;
