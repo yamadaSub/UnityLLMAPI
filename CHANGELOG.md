@@ -2,6 +2,16 @@
 
 このプロジェクトの重要な変更を記録します。
 
+## 1.2.2
+
+### 変更
+- `AIManager` の God クラス化を是正
+  - メッセージ DTO（`Message`, `MessageContent` 等）の定義
+  - モデル列挙 (`AIModelType`) → 実際のモデル ID（例: `"gpt-4o"`）へのマッピング
+  - OpenAI / Grok / Gemini など各 Provider 向けの HTTP リクエスト構築・送信処理
+  - 構造化出力（JSON Schema）・Function Calling の処理
+  - 画像生成 / Vision などの追加機能の実装
+
 ## 1.2.1
 
 ### 変更
