@@ -8,7 +8,7 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 - 対応プロバイダと主なモデル (`AIModelType`):
   - OpenAI: `GPT4o`, `GPT5`, `GPT5Mini`, `GPT5Pro`
   - Grok (x.ai): `Grok2`, `Grok3`
-  - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImage`（旧 `Gemini25FlashImagePreview`）、`Gemini3`, `Gemini3ProImagePreview`（Vision / 画像生成に対応）
+  - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImage`（旧 `Gemini25FlashImagePreview`）、`Gemini3`, `Gemini3ProImage`（Vision / 画像生成に対応）
 - Embedding は OpenAI (text-embedding-3-small / -large) と Gemini Embedding 001 系をサポートします。
 
 ## 2. セットアップ
