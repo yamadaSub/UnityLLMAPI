@@ -8,7 +8,7 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 - 対応プロバイダと主なモデル (`AIModelType`):
   - OpenAI: `GPT4o`, `GPT5`, `GPT5Mini`, `GPT5Pro`
   - Grok (x.ai): `Grok2`, `Grok3`
-  - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImagePreview`, `Gemini3`, `Gemini3ProImagePreview`（Vision / 画像生成に対応）
+  - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImage`（旧 `Gemini25FlashImagePreview`）、`Gemini3`, `Gemini3ProImagePreview`（Vision / 画像生成に対応）
 - Embedding は OpenAI (text-embedding-3-small / -large) と Gemini Embedding 001 系をサポートします。
 
 ## 2. セットアップ
@@ -160,7 +160,7 @@ if (functionResult is AddNumbersFunction add)
 ```
 
 ## 7. 画像生成
-Gemini 2.5 Flash Image Preview / Gemini 3 Pro Image Preview を使って、テキスト指示と既存画像から画像生成・編集ができます。
+Gemini 2.5 Flash Image（GA）/ Gemini 3 Pro Image Preview を使って、テキスト指示と既存画像から画像生成・編集ができます。
 
 ```csharp
 using System.Collections.Generic;
@@ -191,7 +191,7 @@ var initBody = new Dictionary<string, object>
 
 var response = await AIManager.GenerateImagesAsync(
     editMessages,
-    AIModelType.Gemini25FlashImagePreview,
+    AIModelType.Gemini25FlashImage,
     initBody);
 
 if (response?.images.Count > 0)
@@ -245,7 +245,7 @@ var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpus);
   - `SendStructuredMessageWithRealTimeSchemaAsync`: `RealTimeJsonSchema` を送り、実行時に更新された値を `IJsonSchema` として取得。
   - `SendStructuredMessageWithSchemaAsync`: 任意の JSON Schema (Dictionary) を指定して Dictionary で受け取る。
   - `SendFunctionCallMessageAsync`: LLM からの Function Calling 結果を `IJsonSchema` として受信。
-  - `GenerateImagesAsync` / `GenerateImageAsync`: Gemini での画像生成（Gemini 2.5 Flash Image Preview / Gemini 3 Pro Image Preview）。
+- `GenerateImagesAsync` / `GenerateImageAsync`: Gemini での画像生成（Gemini 2.5 Flash Image / Gemini 3 Pro Image Preview）。
 
 - **EmbeddingManager**
   - `CreateEmbeddingAsync(string text, EmbeddingModelType model = EmbeddingModelType.Gemini01)`: 単一テキストの埋め込み生成（Gemini / OpenAI）。

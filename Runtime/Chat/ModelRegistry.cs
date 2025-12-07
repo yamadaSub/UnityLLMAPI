@@ -177,12 +177,12 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
-                AIModelType.Gemini25FlashImagePreview,
+                AIModelType.Gemini25FlashImage,
                 new ModelSpec
                 {
-                    ModelType = AIModelType.Gemini25FlashImagePreview,
+                    ModelType = AIModelType.Gemini25FlashImage,
                     Provider = AIProvider.Gemini,
-                    ModelId = "gemini-2.5-flash-image-preview",
+                    ModelId = "gemini-2.5-flash-image",
                     Capabilities = AICapabilities.ImageGeneration | AICapabilities.Vision,
                     MaxContextTokens = 1048576,
                 }
@@ -202,10 +202,10 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
-                AIModelType.Gemini3ProImagePreview,
+                AIModelType.Gemini3ProImage,
                 new ModelSpec
                 {
-                    ModelType = AIModelType.Gemini3ProImagePreview,
+                    ModelType = AIModelType.Gemini3ProImage,
                     Provider = AIProvider.Gemini,
                     ModelId = "gemini-3-pro-image-preview",
                     Capabilities = AICapabilities.ImageGeneration | AICapabilities.Vision,

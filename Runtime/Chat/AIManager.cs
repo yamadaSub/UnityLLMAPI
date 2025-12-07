@@ -30,9 +30,9 @@ public enum AIModelType
     Gemini25Pro,
     Gemini25Flash,
     Gemini25FlashLite,
-    Gemini25FlashImagePreview,
     Gemini3,
-    Gemini3ProImagePreview
+    Gemini3ProImage,
+    Gemini25FlashImage
 }
 
 /// <summary>
@@ -459,7 +459,7 @@ public static class AIManager
     /// </summary>
     public static async System.Threading.Tasks.Task<ImageGenerationResponse> GenerateImagesAsync(
         List<Message> messages,
-        AIModelType model = AIModelType.Gemini25FlashImagePreview,
+        AIModelType model = AIModelType.Gemini25FlashImage,
         Dictionary<string, object> initBody = null,
         System.Threading.CancellationToken cancellationToken = default,
         int timeoutSeconds = -1)
@@ -491,7 +491,7 @@ public static class AIManager
     /// </summary>
     public static async System.Threading.Tasks.Task<GeneratedImage> GenerateImageAsync(
         List<Message> messages,
-        AIModelType model = AIModelType.Gemini25FlashImagePreview,
+        AIModelType model = AIModelType.Gemini25FlashImage,
         Dictionary<string, object> initBody = null,
         System.Threading.CancellationToken cancellationToken = default,
         int timeoutSeconds = -1)
