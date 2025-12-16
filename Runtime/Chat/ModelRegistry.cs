@@ -67,6 +67,20 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
+                AIModelType.GPT5_2,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.GPT5_2,
+                    Provider = AIProvider.OpenAI,
+                    ModelId = "gpt-5.2",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 128000,
+                }
+            },
+            {
                 AIModelType.GPT5Mini,
                 new ModelSpec
                 {
@@ -118,6 +132,32 @@ namespace UnityLLMAPI.Chat
                                    | AICapabilities.JsonSchema
                                    | AICapabilities.FunctionCalling,
                     MaxContextTokens = 131072,
+                }
+            },
+            {
+                AIModelType.Grok4_1,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Grok4_1,
+                    Provider = AIProvider.Grok,
+                    ModelId = "grok-4-1-fast-non-reasoning",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 2000000,
+                }
+            },
+            {
+                AIModelType.Grok4_1Reasoning,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Grok4_1Reasoning,
+                    Provider = AIProvider.Grok,
+                    ModelId = "grok-4-1-fast-reasoning",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 2000000,
                 }
             },
             {

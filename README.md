@@ -6,8 +6,8 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 ## 1. 概要
 - Unity スクリプトから LLM (テキスト / ビジョン) と Embedding を安全に叩くための補助パッケージです。
 - 対応プロバイダと主なモデル (`AIModelType`):
-  - OpenAI: `GPT4o`, `GPT5`, `GPT5Mini`, `GPT5Pro`
-  - Grok (x.ai): `Grok2`, `Grok3`
+  - OpenAI: `GPT4o`, `GPT5`, `GPT5_2`, `GPT5Mini`, `GPT5Pro`
+  - Grok (x.ai): `Grok2`, `Grok3`, `Grok4_1`, `Grok4_1Reasoning`
   - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImage`（旧 `Gemini25FlashImagePreview`）、`Gemini3`, `Gemini3ProImage`（Vision / 画像生成に対応）
 - Embedding は OpenAI (text-embedding-3-small / -large) と Gemini Embedding 001 系をサポートします。
 
@@ -19,7 +19,7 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 ### API キーの取得と設定
 - 利用するプロバイダごとに以下の環境変数を設定してください（いずれも Process / User / Machine の順で参照されます）。
   - OpenAI: `OPENAI_API_KEY`
-  - Grok (x.ai): `GROK_API_KEY` または `XAI_API_KEY`
+  - Grok (x.ai): `GROK_API_KEY`
   - Google (Gemini): `GOOGLE_API_KEY`
 - 設定例
   - Windows (PowerShell): `Set-Item -Path Env:OPENAI_API_KEY -Value "<your_key>"`

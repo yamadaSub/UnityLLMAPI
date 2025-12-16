@@ -219,8 +219,35 @@ namespace UnityLLMAPI.Chat
         private static void AddFunctions(Dictionary<string, object> body, IReadOnlyList<IJsonSchema> functions)
         {
             if (functions == null || functions.Count == 0) return;
-            body["functions"] = functions.Select(f => f.GenerateJsonSchema()).ToList();
-            body["function_call"] = "auto";
+            body["tools"] = functions.Select(BuildFunctionTool).ToList();
+            body["tool_choice"] = "auto";
+        }
+
+        private static Dictionary<string, object> BuildFunctionTool(IJsonSchema functionSchema)
+        {
+            var schema = functionSchema?.GenerateJsonSchema() ?? new Dictionary<string, object>();
+            var name = schema.TryGetValue("name", out var nObj) ? nObj?.ToString() : functionSchema?.Name;
+            var description = schema.TryGetValue("description", out var dObj) ? dObj?.ToString() : string.Empty;
+
+            object parameters = null;
+            if (schema.TryGetValue("parameters", out var pObj)) parameters = pObj;
+            else if (schema.TryGetValue("schema", out var sObj)) parameters = sObj;
+
+            var function = new Dictionary<string, object>
+            {
+                { "name", name ?? string.Empty },
+                { "parameters", parameters ?? new Dictionary<string, object> { { "type", "object" } } }
+            };
+            if (!string.IsNullOrEmpty(description))
+            {
+                function["description"] = description;
+            }
+
+            return new Dictionary<string, object>
+            {
+                { "type", "function" },
+                { "function", function }
+            };
         }
 
         /// <summary>

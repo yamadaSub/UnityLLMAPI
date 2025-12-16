@@ -20,19 +20,22 @@ namespace UnityLLMAPI.Chat
 /// </summary>
 public enum AIModelType
 {
-    GPT4o,
-    GPT5,
-    GPT5Mini,
-    GPT5Pro,
-    Grok2,
-    Grok3,
-    Gemini25,
-    Gemini25Pro,
-    Gemini25Flash,
-    Gemini25FlashLite,
-    Gemini3,
-    Gemini3ProImage,
-    Gemini25FlashImage
+    GPT4o = 0,
+    GPT5 = 1,
+    GPT5_2 = 13,
+    GPT5Mini = 2,
+    GPT5Pro = 3,
+    Grok2 = 4,
+    Grok3 = 5,
+    Grok4_1 = 14,
+    Grok4_1Reasoning = 15,
+    Gemini25 = 6,
+    Gemini25Pro = 7,
+    Gemini25Flash = 8,
+    Gemini25FlashLite = 9,
+    Gemini3 = 10,
+    Gemini3ProImage = 11,
+    Gemini25FlashImage = 12
 }
 
 /// <summary>

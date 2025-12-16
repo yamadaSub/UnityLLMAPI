@@ -2,6 +2,14 @@
 
 このプロジェクトの重要な変更を記録します。
 
+## 1.2.4
+
+### 変更
+- Grok 4.1 モデル（`AIModelType.Grok4_1` / `grok-4-1-fast-non-reasoning`）を追加
+- Grok 4.1 Reasoning モデル（`AIModelType.Grok4_1Reasoning` / `grok-4-1-fast-reasoning`）を追加
+- GPT-5.2 モデル（`AIModelType.GPT5_2` / `gpt-5.2`）を追加
+- OpenAI / Grok の Function Calling を `tools` / `tool_choice` 形式に対応（レスポンスの `tool_calls` もパース）
+
 ## 1.2.3
 
 ### 変更

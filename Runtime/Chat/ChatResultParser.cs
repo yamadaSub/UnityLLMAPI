@@ -67,18 +67,54 @@ namespace UnityLLMAPI.Chat
 
         private static IJsonSchema ExtractOpenAiFunction(JObject body, IReadOnlyList<IJsonSchema> functions)
         {
-            var fc = body?["choices"]?[0]?["message"]?["function_call"];
+            var message = body?["choices"]?[0]?["message"] as JObject;
+            if (message == null) return null;
+
+            // New format: tool_calls (tools)
+            var toolCalls = message["tool_calls"] as JArray;
+            if (toolCalls != null)
+            {
+                foreach (var toolCall in toolCalls)
+                {
+                    var func = toolCall?["function"] as JObject;
+                    if (func == null) continue;
+
+                    var funcName = func["name"]?.ToString() ?? string.Empty;
+                    var argJson = func["arguments"]?.ToString() ?? "{}";
+                    var parsed = ParseFunctionArguments(functions, funcName, argJson);
+                    if (parsed != null) return parsed;
+                }
+            }
+
+            // Legacy format: function_call (functions)
+            var fc = message["function_call"] as JObject;
             if (fc == null) return null;
 
-            var funcName = fc["name"]?.ToString() ?? string.Empty;
-            var argJson = fc["arguments"]?.ToString() ?? "{}";
+            return ParseFunctionArguments(
+                functions,
+                fc["name"]?.ToString() ?? string.Empty,
+                fc["arguments"]?.ToString() ?? "{}");
+        }
+
+        private static IJsonSchema ParseFunctionArguments(IReadOnlyList<IJsonSchema> functions, string funcName, string argJson)
+        {
+            if (functions == null || functions.Count == 0) return null;
+            if (string.IsNullOrEmpty(funcName)) return null;
+
             var target = functions.FirstOrDefault(f => f.Name == funcName);
             if (target == null) return null;
 
-            var argDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(argJson)
-                          ?? new Dictionary<string, object>();
-            target.ParseValueDict(argDict);
-            return target;
+            try
+            {
+                var argDict = JsonConvert.DeserializeObject<Dictionary<string, object>>(argJson)
+                              ?? new Dictionary<string, object>();
+                target.ParseValueDict(argDict);
+                return target;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static IJsonSchema ExtractGeminiFunction(JObject body, IReadOnlyList<IJsonSchema> functions)

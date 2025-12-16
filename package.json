@@ -1,7 +1,7 @@
 {
   "name": "com.yamadasub.llmapi",
   "displayName": "LLMAPI",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "unity": "6000.0",
   "description": "LLMをひとまず使うための自作ライブラリ",
   "author": {
