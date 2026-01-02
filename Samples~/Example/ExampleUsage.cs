@@ -43,6 +43,29 @@ public class ExampleUsage : MonoBehaviour
         Debug.Log($"[SimpleChat] {reply}");
     }
 
+    [ContextMenu("Send Streaming Chat")]
+    public async void SendStreamingChatAsync()
+    {
+        var messages = new List<Message>
+        {
+            new Message { role = MessageRole.System, content = "あなたは親切な Unity アシスタントです。" },
+            new Message { role = MessageRole.User,   content = freeFormPrompt }
+        };
+
+        var result = await AIManager.SendMessageStreamAsync(
+            messages,
+            chatModel,
+            onContentDelta: delta => Debug.Log($"[StreamΔ] {delta}"));
+
+        if (result == null)
+        {
+            Debug.LogWarning("[StreamingChat] 応答が取得できませんでした。");
+            return;
+        }
+
+        Debug.Log($"[StreamingChat] Done.\n{result.Content}");
+    }
+
     [ContextMenu("Send Structured Message")]
     public async void SendStructuredAsync()
     {
@@ -167,8 +190,6 @@ public class ExampleUsage : MonoBehaviour
                 new SchemaParameter { ParameterName = "b", ParameterType = SchemaParameterType.Number, Description = "2 つ目の数値" }
             };
         }
-
-        public string Description { get; }
     }
     #endregion
 }

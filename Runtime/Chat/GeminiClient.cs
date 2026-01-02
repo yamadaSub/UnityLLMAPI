@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
@@ -48,6 +49,53 @@ namespace UnityLLMAPI.Chat
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
 
             return BuildRawChatResult(model, req);
+        }
+
+        public async Task<RawChatStreamResult> SendChatStreamAsync(
+            ModelSpec model,
+            IReadOnlyList<Message> messages,
+            ChatRequestOptions options,
+            System.Action<string> onContentDelta,
+            CancellationToken ct)
+        {
+            var apiKey = ApiKeyResolver.GoogleApiKey;
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                Debug.LogError($"API key not configured. {ApiKeyResolver.GetRequiredEnvHint(model)}");
+                return FailureChatStreamResult(model, "Missing Google API key");
+            }
+
+            var endpoint = $"{ApiBase}/{model.ModelId}:streamGenerateContent?alt=sse";
+            var contents = MessagePayloadBuilder.BuildGeminiContents(messages?.ToList() ?? new List<Message>());
+
+            var body = new Dictionary<string, object> { { "contents", contents } };
+            AddFunctionDeclarations(body, options?.Functions);
+            MergeAdditionalBody(body, options?.AdditionalBody);
+
+            var content = new StringBuilder();
+            var sse = new SseEventParser(payload =>
+            {
+                if (string.IsNullOrEmpty(payload)) return;
+                if (payload.Trim() == "[DONE]") return;
+                TryConsumeGeminiStreamEvent(payload, content, onContentDelta);
+            });
+
+            var jsonBody = JsonConvert.SerializeObject(body);
+            using var req = BuildStreamRequest(endpoint, apiKey, jsonBody, sse);
+            await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
+            sse.Complete();
+
+            var rawText = req.downloadHandler?.text;
+            return new RawChatStreamResult
+            {
+                Provider = AIProvider.Gemini,
+                ModelId = model.ModelId,
+                IsSuccess = req.result == UnityWebRequest.Result.Success,
+                StatusCode = req.responseCode,
+                ErrorMessage = req.result == UnityWebRequest.Result.Success ? null : req.error,
+                RawText = rawText,
+                Content = content.ToString()
+            };
         }
 
         public async Task<RawChatResult> SendStructuredAsync(
@@ -222,6 +270,45 @@ namespace UnityLLMAPI.Chat
             return req;
         }
 
+        private static UnityWebRequest BuildStreamRequest(string endpoint, string apiKey, string jsonBody, SseEventParser sse)
+        {
+            var req = new UnityWebRequest(endpoint, "POST")
+            {
+                uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
+                downloadHandler = new StreamingDownloadHandler(chunk => sse?.Feed(chunk))
+            };
+            req.SetRequestHeader("Content-Type", "application/json");
+            req.SetRequestHeader("x-goog-api-key", apiKey);
+            return req;
+        }
+
+        private static void TryConsumeGeminiStreamEvent(
+            string payload,
+            StringBuilder content,
+            System.Action<string> onContentDelta)
+        {
+            try
+            {
+                var obj = JObject.Parse(payload);
+                var parts = obj?["candidates"]?[0]?["content"]?["parts"] as JArray;
+                if (parts == null) return;
+
+                foreach (var part in parts)
+                {
+                    var text = part?["text"]?.ToString();
+                    if (!string.IsNullOrEmpty(text))
+                    {
+                        content?.Append(text);
+                        onContentDelta?.Invoke(text);
+                    }
+                }
+            }
+            catch
+            {
+                // ignore bad stream chunks
+            }
+        }
+
         /// <summary>
         /// ボディに追加パラメータをマージする。
         /// </summary>
@@ -331,6 +418,20 @@ namespace UnityLLMAPI.Chat
                 ErrorMessage = message,
                 RawJson = string.Empty,
                 Body = null
+            };
+        }
+
+        private static RawChatStreamResult FailureChatStreamResult(ModelSpec model, string message)
+        {
+            return new RawChatStreamResult
+            {
+                Provider = AIProvider.Gemini,
+                ModelId = model.ModelId,
+                IsSuccess = false,
+                StatusCode = 0,
+                ErrorMessage = message,
+                RawText = string.Empty,
+                Content = string.Empty,
             };
         }
 

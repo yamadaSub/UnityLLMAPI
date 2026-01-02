@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
@@ -48,6 +49,57 @@ namespace UnityLLMAPI.Chat
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
 
             return BuildRawChatResult(model, req);
+        }
+
+        public async Task<RawChatStreamResult> SendChatStreamAsync(
+            ModelSpec model,
+            IReadOnlyList<Message> messages,
+            ChatRequestOptions options,
+            System.Action<string> onContentDelta,
+            CancellationToken ct)
+        {
+            var apiKey = ApiKeyResolver.GrokApiKey;
+            if (string.IsNullOrEmpty(apiKey))
+            {
+                Debug.LogError($"API key not configured. {ApiKeyResolver.GetRequiredEnvHint(model)}");
+                return FailureChatStreamResult(model, "Missing Grok API key");
+            }
+
+            var body = new Dictionary<string, object>
+            {
+                { "model", model.ModelId },
+                { "messages", MessagePayloadBuilder.BuildOpenAiMessages(messages?.ToList() ?? new List<Message>()) },
+                { "stream", true }
+            };
+
+            AddFunctions(body, options?.Functions);
+            MergeAdditionalBody(body, options?.AdditionalBody);
+            body["stream"] = true;
+
+            var content = new StringBuilder();
+            var sse = new SseEventParser(payload =>
+            {
+                if (string.IsNullOrEmpty(payload)) return;
+                if (payload.Trim() == "[DONE]") return;
+                TryConsumeGrokStreamEvent(payload, content, onContentDelta);
+            });
+
+            var jsonBody = JsonConvert.SerializeObject(body);
+            using var req = BuildStreamRequest(apiKey, jsonBody, sse);
+            await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
+            sse.Complete();
+
+            var rawText = req.downloadHandler?.text;
+            return new RawChatStreamResult
+            {
+                Provider = AIProvider.Grok,
+                ModelId = model.ModelId,
+                IsSuccess = req.result == UnityWebRequest.Result.Success,
+                StatusCode = req.responseCode,
+                ErrorMessage = req.result == UnityWebRequest.Result.Success ? null : req.error,
+                RawText = rawText,
+                Content = content.ToString()
+            };
         }
 
         public async Task<RawChatResult> SendStructuredAsync(
@@ -121,6 +173,42 @@ namespace UnityLLMAPI.Chat
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("Authorization", "Bearer " + apiKey);
             return req;
+        }
+
+        private static UnityWebRequest BuildStreamRequest(string apiKey, string jsonBody, SseEventParser sse)
+        {
+            var req = new UnityWebRequest(ChatEndpoint, "POST")
+            {
+                uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
+                downloadHandler = new StreamingDownloadHandler(chunk => sse?.Feed(chunk))
+            };
+            req.SetRequestHeader("Content-Type", "application/json");
+            req.SetRequestHeader("Authorization", "Bearer " + apiKey);
+            return req;
+        }
+
+        private static void TryConsumeGrokStreamEvent(
+            string payload,
+            StringBuilder content,
+            System.Action<string> onContentDelta)
+        {
+            try
+            {
+                var obj = JObject.Parse(payload);
+                var delta = obj?["choices"]?[0]?["delta"] as JObject;
+                if (delta == null) return;
+
+                var contentDelta = delta["content"]?.ToString();
+                if (!string.IsNullOrEmpty(contentDelta))
+                {
+                    content?.Append(contentDelta);
+                    onContentDelta?.Invoke(contentDelta);
+                }
+            }
+            catch
+            {
+                // ignore bad stream chunks
+            }
         }
 
         /// <summary>
@@ -217,6 +305,20 @@ namespace UnityLLMAPI.Chat
                 ErrorMessage = message,
                 RawJson = string.Empty,
                 Body = null
+            };
+        }
+
+        private static RawChatStreamResult FailureChatStreamResult(ModelSpec model, string message)
+        {
+            return new RawChatStreamResult
+            {
+                Provider = AIProvider.Grok,
+                ModelId = model.ModelId,
+                IsSuccess = false,
+                StatusCode = 0,
+                ErrorMessage = message,
+                RawText = string.Empty,
+                Content = string.Empty
             };
         }
     }

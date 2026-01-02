@@ -281,6 +281,24 @@ public static class AIManager
     }
 
     /// <summary>
+    /// チャットストリーミングレスポンスが失敗していないか判定し、失敗ならログを出す。
+    /// </summary>
+    private static bool IsFailed(RawChatStreamResult raw, ModelSpec spec)
+    {
+        if (raw == null)
+        {
+            UnityEngine.Debug.LogError($"No stream response received from provider for {spec.ModelType}.");
+            return true;
+        }
+        if (!raw.IsSuccess)
+        {
+            UnityEngine.Debug.LogError($"Provider streaming call failed for {spec.ModelId}: {raw.ErrorMessage ?? "unknown error"}");
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// 画像生成レスポンスが失敗していないか判定し、失敗ならログを出す。
     /// </summary>
     private static bool IsFailed(RawImageResult raw, ModelSpec spec)
@@ -337,6 +355,25 @@ public static class AIManager
         if (IsFailed(raw, spec)) return null;
 
         return ChatResultParser.ExtractAssistantMessage(raw);
+    }
+
+    public static async System.Threading.Tasks.Task<RawChatStreamResult> SendMessageStreamAsync(
+        List<Message> messages,
+        AIModelType model,
+        Dictionary<string, object> initBody = null,
+        System.Threading.CancellationToken cancellationToken = default,
+        int timeoutSeconds = -1,
+        System.Action<string> onContentDelta = null)
+    {
+        var spec = ModelRegistry.Get(model);
+        EnsureCapability(spec, AICapabilities.TextChat);
+
+        var provider = ProviderRegistry.Get(spec.Provider);
+        var options = BuildChatOptions(initBody, timeoutSeconds);
+        var raw = await provider.SendChatStreamAsync(spec, messages, options, onContentDelta, cancellationToken);
+        if (IsFailed(raw, spec)) return null;
+
+        return raw;
     }
 
     /// <summary>

@@ -76,6 +76,28 @@ var visionReply = await AIManager.SendMessageAsync(messages, AIModelType.GPT4o);
 ```
 `MessageContent.FromImageData` や `MessageContent.FromImageUrl` も利用可能です。
 
+### ストリーミング受信
+`SendMessageStreamAsync` はストリーミング受信に対応し、`onContentDelta` で逐次出力できます。
+※コールバックは `UnityWebRequest` の受信処理内で呼ばれるため、UI 更新などが必要な場合は適宜メインスレッドへディスパッチしてください。
+```csharp
+using System.Collections.Generic;
+using UnityEngine;
+using UnityLLMAPI.Chat;
+
+var messages = new List<Message>
+{
+    new Message { role = MessageRole.System, content = "あなたは親切な Unity アシスタントです。" },
+    new Message { role = MessageRole.User,   content = "設計方針を整理して、手順も示して。" }
+};
+
+var stream = await AIManager.SendMessageStreamAsync(
+    messages,
+    AIModelType.Gemini25Flash,
+    onContentDelta: delta => Debug.Log(delta));
+
+Debug.Log(stream?.Content);
+```
+
 ## 5. JSON Schema ベースの構造化応答
 `SendStructuredMessageAsync<T>` は指定した C# 型から JSON Schema を自動生成し、LLM の応答を `T` にデシリアライズします。属性で制約も付与できます。
 

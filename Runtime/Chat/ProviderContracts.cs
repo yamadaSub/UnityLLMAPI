@@ -37,6 +37,26 @@ namespace UnityLLMAPI.Chat
         public JObject Body { get; set; }
     }
 
+    // Provider から受け取ったチャットストリーミングレスポンスの生データ
+    public sealed class RawChatStreamResult
+    {
+        public AIProvider Provider { get; set; }
+        public string ModelId { get; set; }
+        public bool IsSuccess { get; set; }
+        public long StatusCode { get; set; }
+        public string ErrorMessage { get; set; }
+
+        /// <summary>
+        /// ストリームとして受信した生テキスト（SSE 等）の全量
+        /// </summary>
+        public string RawText { get; set; }
+
+        /// <summary>
+        /// アシスタントの通常出力（content）の全量
+        /// </summary>
+        public string Content { get; set; }
+    }
+
     // Provider から受け取った画像生成レスポンスの生データ
     public sealed class RawImageResult
     {
@@ -100,6 +120,16 @@ namespace UnityLLMAPI.Chat
         Task<RawEmbeddingResult> CreateEmbeddingAsync(
             ModelSpec model,
             IReadOnlyList<string> texts,
+            CancellationToken ct);
+
+        /// <summary>
+        /// ストリーミングでチャットを送信し、デルタを逐次通知しつつ結果を返す。
+        /// </summary>
+        Task<RawChatStreamResult> SendChatStreamAsync(
+            ModelSpec model,
+            IReadOnlyList<Message> messages,
+            ChatRequestOptions options,
+            System.Action<string> onContentDelta,
             CancellationToken ct);
     }
 }
