@@ -95,20 +95,6 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
-                AIModelType.GPT5Pro,
-                new ModelSpec
-                {
-                    ModelType = AIModelType.GPT5Pro,
-                    Provider = AIProvider.OpenAI,
-                    ModelId = "gpt-5-pro",
-                    Capabilities = AICapabilities.TextChat
-                                   | AICapabilities.Vision
-                                   | AICapabilities.JsonSchema
-                                   | AICapabilities.FunctionCalling,
-                    MaxContextTokens = 128000,
-                }
-            },
-            {
                 AIModelType.Grok2,
                 new ModelSpec
                 {
@@ -228,12 +214,12 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
-                AIModelType.Gemini3,
+                AIModelType.Gemini31,
                 new ModelSpec
                 {
-                    ModelType = AIModelType.Gemini3,
+                    ModelType = AIModelType.Gemini31,
                     Provider = AIProvider.Gemini,
-                    ModelId = "gemini-3.0-pro-exp",
+                    ModelId = "gemini-3.1-pro-preview",
                     Capabilities = AICapabilities.TextChat
                                    | AICapabilities.Vision
                                    | AICapabilities.JsonSchema
@@ -250,6 +236,17 @@ namespace UnityLLMAPI.Chat
                     ModelId = "gemini-3-pro-image-preview",
                     Capabilities = AICapabilities.ImageGeneration | AICapabilities.Vision,
                     MaxContextTokens = 1048576,
+                }
+            },
+            {
+                AIModelType.Gemini31FlashImage,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Gemini31FlashImage,
+                    Provider = AIProvider.Gemini,
+                    ModelId = "gemini-3.1-flash-image-preview",
+                    Capabilities = AICapabilities.ImageGeneration | AICapabilities.Vision,
+                    MaxContextTokens = 131072,
                 }
             },
         };

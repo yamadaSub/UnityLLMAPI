@@ -79,7 +79,7 @@ namespace UnityLLMAPI.Chat
             body["stream"] = true;
 
             var content = new StringBuilder();
-            var sse = new SseEventParser(payload =>
+            var streamHandler = StreamingDownloadHandler.ForServerSentEvents(payload =>
             {
                 if (string.IsNullOrEmpty(payload)) return;
                 if (payload.Trim() == "[DONE]") return;
@@ -87,9 +87,9 @@ namespace UnityLLMAPI.Chat
             });
 
             var jsonBody = JsonConvert.SerializeObject(body);
-            using var req = BuildStreamRequest(ChatEndpoint, apiKey, jsonBody, sse);
+            using var req = BuildStreamRequest(ChatEndpoint, apiKey, jsonBody, streamHandler);
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
-            sse.Complete();
+            streamHandler.CompleteServerSentEvents();
 
             var rawText = req.downloadHandler?.text;
             return new RawChatStreamResult
@@ -235,13 +235,17 @@ namespace UnityLLMAPI.Chat
             return req;
         }
 
-        private static UnityWebRequest BuildStreamRequest(string endpoint, string apiKey, string jsonBody, SseEventParser sse)
+        private static UnityWebRequest BuildStreamRequest(
+            string endpoint,
+            string apiKey,
+            string jsonBody,
+            StreamingDownloadHandler streamHandler)
         {
             var bodyBytes = System.Text.Encoding.UTF8.GetBytes(jsonBody);
             var req = new UnityWebRequest(endpoint, "POST")
             {
                 uploadHandler = new UploadHandlerRaw(bodyBytes),
-                downloadHandler = new StreamingDownloadHandler(chunk => sse?.Feed(chunk))
+                downloadHandler = streamHandler
             };
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("Authorization", "Bearer " + apiKey);

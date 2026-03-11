@@ -12,7 +12,7 @@ using UnityLLMAPI.Schema;
 public class ExampleUsage : MonoBehaviour
 {
     [Header("共通設定")]
-    [Tooltip("テキスト系の呼び出しで使用するモデル。Gemini 3 / Gemini 2.5 / GPT などを指定可能。")]
+    [Tooltip("テキスト系の呼び出しで使用するモデル。Gemini 3.1 / Gemini 2.5 / GPT などを指定可能。")]
     public AIModelType chatModel = AIModelType.Gemini25Flash;
 
     [Tooltip("チャット送信時のユーザープロンプト。")]

@@ -24,7 +24,6 @@ public enum AIModelType
     GPT5 = 1,
     GPT5_2 = 13,
     GPT5Mini = 2,
-    GPT5Pro = 3,
     Grok2 = 4,
     Grok3 = 5,
     Grok4_1 = 14,
@@ -33,9 +32,10 @@ public enum AIModelType
     Gemini25Pro = 7,
     Gemini25Flash = 8,
     Gemini25FlashLite = 9,
-    Gemini3 = 10,
+    Gemini31 = 10,
     Gemini3ProImage = 11,
-    Gemini25FlashImage = 12
+    Gemini25FlashImage = 12,
+    Gemini31FlashImage = 16
 }
 
 /// <summary>

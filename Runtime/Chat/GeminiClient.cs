@@ -17,7 +17,6 @@ namespace UnityLLMAPI.Chat
     internal sealed class GeminiClient : IProviderClient
     {
         private const string ApiBase = "https://generativelanguage.googleapis.com/v1beta/models";
-        private const string EmbeddingEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent";
 
         public AIProvider Provider => AIProvider.Gemini;
 
@@ -73,7 +72,7 @@ namespace UnityLLMAPI.Chat
             MergeAdditionalBody(body, options?.AdditionalBody);
 
             var content = new StringBuilder();
-            var sse = new SseEventParser(payload =>
+            var streamHandler = StreamingDownloadHandler.ForServerSentEvents(payload =>
             {
                 if (string.IsNullOrEmpty(payload)) return;
                 if (payload.Trim() == "[DONE]") return;
@@ -81,9 +80,9 @@ namespace UnityLLMAPI.Chat
             });
 
             var jsonBody = JsonConvert.SerializeObject(body);
-            using var req = BuildStreamRequest(endpoint, apiKey, jsonBody, sse);
+            using var req = BuildStreamRequest(endpoint, apiKey, jsonBody, streamHandler);
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
-            sse.Complete();
+            streamHandler.CompleteServerSentEvents();
 
             var rawText = req.downloadHandler?.text;
             return new RawChatStreamResult
@@ -205,18 +204,9 @@ namespace UnityLLMAPI.Chat
                 ct.ThrowIfCancellationRequested();
                 if (string.IsNullOrEmpty(text)) continue;
 
-                var body = new Dictionary<string, object>
-                {
-                    { "model", "models/gemini-embedding-001" },
-                    { "content", new Dictionary<string, object>
-                        {
-                            { "parts", new[]{ new Dictionary<string, string>{{ "text", text }} } }
-                        }
-                    }
-                };
-
+                var body = GeminiEmbeddingPayloadBuilder.BuildRequestBody(model.ModelId, EmbeddingInput.FromText(text));
                 var jsonBody = JsonConvert.SerializeObject(body);
-                using var req = BuildRequest(EmbeddingEndpoint, apiKey, jsonBody);
+                using var req = BuildRequest(GeminiEmbeddingPayloadBuilder.BuildEndpoint(model.ModelId), apiKey, jsonBody);
                 await UnityWebRequestUtils.SendAsync(req, ct, -1);
 
                 lastStatus = req.responseCode;
@@ -270,12 +260,16 @@ namespace UnityLLMAPI.Chat
             return req;
         }
 
-        private static UnityWebRequest BuildStreamRequest(string endpoint, string apiKey, string jsonBody, SseEventParser sse)
+        private static UnityWebRequest BuildStreamRequest(
+            string endpoint,
+            string apiKey,
+            string jsonBody,
+            StreamingDownloadHandler streamHandler)
         {
             var req = new UnityWebRequest(endpoint, "POST")
             {
                 uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
-                downloadHandler = new StreamingDownloadHandler(chunk => sse?.Feed(chunk))
+                downloadHandler = streamHandler
             };
             req.SetRequestHeader("Content-Type", "application/json");
             req.SetRequestHeader("x-goog-api-key", apiKey);

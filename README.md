@@ -6,10 +6,10 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 ## 1. 概要
 - Unity スクリプトから LLM (テキスト / ビジョン) と Embedding を安全に叩くための補助パッケージです。
 - 対応プロバイダと主なモデル (`AIModelType`):
-  - OpenAI: `GPT4o`, `GPT5`, `GPT5_2`, `GPT5Mini`, `GPT5Pro`
+  - OpenAI: `GPT4o`, `GPT5`, `GPT5_2`, `GPT5Mini`
   - Grok (x.ai): `Grok2`, `Grok3`, `Grok4_1`, `Grok4_1Reasoning`
-  - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImage`（旧 `Gemini25FlashImagePreview`）、`Gemini3`, `Gemini3ProImage`（Vision / 画像生成に対応）
-- Embedding は OpenAI (text-embedding-3-small / -large) と Gemini Embedding 001 系をサポートします。
+  - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImage`（旧 `Gemini25FlashImagePreview`）、`Gemini31`, `Gemini3ProImage`, `Gemini31FlashImage`（Vision / 画像生成に対応）
+- Embedding は OpenAI (text-embedding-3-small / -large)、Gemini Embedding 001 系、Gemini Embedding 2（マルチモーダル入力対応）をサポートします。
 
 ## 2. セットアップ
 
@@ -182,7 +182,7 @@ if (functionResult is AddNumbersFunction add)
 ```
 
 ## 7. 画像生成
-Gemini 2.5 Flash Image（GA）/ Gemini 3 Pro Image Preview を使って、テキスト指示と既存画像から画像生成・編集ができます。
+Gemini 2.5 Flash Image（GA）/ Gemini 3 Pro Image Preview / Gemini 3.1 Flash Image を使って、テキスト指示と既存画像から画像生成・編集ができます。
 
 ```csharp
 using System.Collections.Generic;
@@ -213,7 +213,7 @@ var initBody = new Dictionary<string, object>
 
 var response = await AIManager.GenerateImagesAsync(
     editMessages,
-    AIModelType.Gemini25FlashImage,
+    AIModelType.Gemini31FlashImage,
     initBody);
 
 if (response?.images.Count > 0)
@@ -232,10 +232,14 @@ using UnityLLMAPI.Embedding;
 
 var queryEmbedding = await EmbeddingManager.CreateEmbeddingAsync(
     "Unity loves C#",
-    EmbeddingModelType.Gemini01_1536); // Gemini 01 の出力次元 1,536
+    EmbeddingModelType.GeminiEmbedding2,
+    outputDimensionality: 1536);
 
 var corpusTexts = new List<string> { "Unity", "Unreal", "C#", "Shader Graph" };
-var corpus = await EmbeddingManager.CreateEmbeddingsAsync(corpusTexts, EmbeddingModelType.Gemini01_1536);
+var corpus = await EmbeddingManager.CreateEmbeddingsAsync(
+    corpusTexts,
+    EmbeddingModelType.GeminiEmbedding2,
+    outputDimensionality: 1536);
 
 var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpus);
 ```
@@ -247,7 +251,8 @@ var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpus);
 | --- | --- |
 | `Samples~/Example/ExampleUsage.cs` | 通常チャット、構造化レスポンス、RealTime Schema、Function Calling を Inspector の ContextMenu から実行 |
 | `Samples~/Example/VisionSamples.cs` | Gemini 画像生成（編集）と Vision での画像説明のデモ。指示 + Texture2D を渡し、生成画像を保存 |
-| `Samples~/Example/EmbeddingSample.cs` | Embedding 生成、コサイン類似度ランキング、Hadamard 積 / 除算の例 |
+| `Samples~/Example/EmbeddingSample.cs` | word2vec 風の近傍探索、Gemini Embedding 2 のマルチモーダル入力例、同一コーパスでのコサイン類似度比較 |
+| `Samples~/Example/API_REFERENCE.md` | サンプルと主要 API の要点をまとめた簡易リファレンス |
 
 各サンプルは MonoBehaviour をシーンに配置し、インスペクターの ContextMenu から実行できます。Vision サンプルはデフォルトで `Assets` 配下に PNG を保存します（必要に応じて `Application.persistentDataPath` などに変更してください）。
 
@@ -267,12 +272,15 @@ var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpus);
   - `SendStructuredMessageWithRealTimeSchemaAsync`: `RealTimeJsonSchema` を送り、実行時に更新された値を `IJsonSchema` として取得。
   - `SendStructuredMessageWithSchemaAsync`: 任意の JSON Schema (Dictionary) を指定して Dictionary で受け取る。
   - `SendFunctionCallMessageAsync`: LLM からの Function Calling 結果を `IJsonSchema` として受信。
-- `GenerateImagesAsync` / `GenerateImageAsync`: Gemini での画像生成（Gemini 2.5 Flash Image / Gemini 3 Pro Image Preview）。
+- `GenerateImagesAsync` / `GenerateImageAsync`: Gemini での画像生成（Gemini 2.5 Flash Image / Gemini 3 Pro Image Preview / Gemini 3.1 Flash Image）。
 
 - **EmbeddingManager**
-  - `CreateEmbeddingAsync(string text, EmbeddingModelType model = EmbeddingModelType.Gemini01)`: 単一テキストの埋め込み生成（Gemini / OpenAI）。
-  - `CreateEmbeddingsAsync(IEnumerable<string> texts, EmbeddingModelType model = EmbeddingModelType.Gemini01)`: 複数テキストの埋め込み生成。
-  - `EmbeddingModelType.Gemini01 / Gemini01_1536 / Gemini01_768`: Gemini Embedding 001 の出力次元を指定。
+  - `CreateEmbeddingAsync(string text, EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2, ..., int? outputDimensionality = null)`: 単一テキストの埋め込み生成（Gemini / OpenAI）。
+  - `CreateEmbeddingsAsync(IEnumerable<string> texts, EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2, ..., int? outputDimensionality = null)`: 複数テキストの埋め込み生成。
+  - `EmbeddingModelType.GeminiEmbedding2`: 既定の Gemini 埋め込みモデル。マルチモーダル入力と `128` から `3072` の出力次元指定に対応。
+  - `CreateEmbeddingAsync(EmbeddingInput input, EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2, ..., int? outputDimensionality = null)`: マルチモーダル入力を含む単一埋め込み生成。
+  - `CreateEmbeddingsAsync(IEnumerable<EmbeddingInput> inputs, EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2, ..., int? outputDimensionality = null)`: 複数のマルチモーダル入力の埋め込み生成。
+  - `EmbeddingModelType.Gemini01 / Gemini01_1536 / Gemini01_768`: Gemini Embedding 001 系のテキスト専用モデル。
   - `EmbeddingModelType.OpenAISmall / OpenAILarge`: OpenAI text-embedding-3-small / -large を指定。
   - `RankByCosine`: コサイン類似度でコーパスをランキング。
 

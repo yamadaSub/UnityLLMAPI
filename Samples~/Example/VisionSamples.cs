@@ -8,7 +8,7 @@ using UnityLLMAPI.Chat;
 /// </summary>
 public class VisionSamples : MonoBehaviour
 {
-    [Header("Image Edit (Gemini 2.5 Flash Image)")]
+    [Header("Image Edit (Gemini Image Models)")]
     [Tooltip("編集の元となるテクスチャ。非 readable でも GPU 読み戻しで処理します。")]
     public Texture2D sourceImage;
 
@@ -16,8 +16,8 @@ public class VisionSamples : MonoBehaviour
     [Tooltip("画像編集時にモデルへ伝える指示。空の場合は『水彩画風にしてください。』を使用します。")]
     public string editInstruction = "水彩画風にしてください。";
 
-    [Tooltip("画像生成・編集に使用するモデル。現在は Gemini 2.5 Flash Image (GA) / Gemini 3 Pro Image Preview のみがサポートされています。")]
-    public AIModelType imageGenerationModel = AIModelType.Gemini25FlashImage;
+    [Tooltip("画像生成・編集に使用するモデル。現在は Gemini 2.5 Flash Image (GA) / Gemini 3 Pro Image Preview / Gemini 3.1 Flash Image がサポートされています。")]
+    public AIModelType imageGenerationModel = AIModelType.Gemini31FlashImage;
 
     [Header("Output Settings")]
     [Tooltip("画像の保存先フォルダパス (Assets からの相対パス)。空の場合は Assets 直下になります。")]

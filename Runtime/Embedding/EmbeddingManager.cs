@@ -11,179 +11,189 @@ using UnityLLMAPI.Common;
 
 namespace UnityLLMAPI.Embedding
 {
-    /// <summary>
-    /// 利用可能な埋め込みモデル種別。
-    /// </summary>
     public enum EmbeddingModelType
     {
         OpenAISmall,
         OpenAILarge,
         Gemini01,
         Gemini01_1536,
-        Gemini01_768
+        Gemini01_768,
+        GeminiEmbedding2
     }
 
-    /// <summary>
-    /// OpenAI / Gemini の埋め込みベクトルを取得するためのヘルパークラス。
-    /// API キーの解決は <see cref="AIManager"/> と同様。
-    /// </summary>
     public static class EmbeddingManager
     {
-        // Embedding はチャットとは別の OpenAI 専用エンドポイントを使用する。
-        private const string openAiEmbeddingsEndpoint = "https://api.openai.com/v1/embeddings";
-        private const string geminiEmbeddingsEndpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent";
+        private const string OpenAiEmbeddingsEndpoint = "https://api.openai.com/v1/embeddings";
 
-        /// <summary>
-        /// 単一テキストに対する埋め込みベクトルを取得する。
-        /// </summary>
-        /// <param name="text">埋め込み対象テキスト。</param>
-        /// <param name="model">使用するバックエンド。</param>
-        /// <param name="cancellationToken">キャンセル要求を監視。</param>
-        /// <param name="timeoutSeconds">UnityWebRequest.timeout に設定する秒数。</param>
+        private enum EmbeddingProviderType
+        {
+            OpenAI,
+            Gemini
+        }
+
+        private readonly struct EmbeddingModelSpec
+        {
+            public EmbeddingModelSpec(EmbeddingProviderType provider, string modelName, int? outputDimensionality = null)
+            {
+                Provider = provider;
+                ModelName = modelName;
+                OutputDimensionality = outputDimensionality;
+            }
+
+            public EmbeddingProviderType Provider { get; }
+            public string ModelName { get; }
+            public int? OutputDimensionality { get; }
+            public bool SupportsMultimodal => Provider == EmbeddingProviderType.Gemini && GeminiEmbeddingPayloadBuilder.SupportsMultimodal(ModelName);
+        }
+
         public static async Task<SerializableEmbedding> CreateEmbeddingAsync(
             string text,
-            EmbeddingModelType model = EmbeddingModelType.Gemini01,
+            EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2,
             CancellationToken cancellationToken = default,
-            int timeoutSeconds = -1)
+            int timeoutSeconds = -1,
+            int? outputDimensionality = null)
         {
-            switch (model)
-            {
-                case EmbeddingModelType.Gemini01:
-                    return await CreateGeminiEmbeddingAsync(text, null, cancellationToken, timeoutSeconds);
-                case EmbeddingModelType.Gemini01_1536:
-                    return await CreateGeminiEmbeddingAsync(text, 1536, cancellationToken, timeoutSeconds);
-                case EmbeddingModelType.Gemini01_768:
-                    return await CreateGeminiEmbeddingAsync(text, 768, cancellationToken, timeoutSeconds);
-                case EmbeddingModelType.OpenAILarge:
-                    return await CreateEmbeddingAsyncOpenAI(text, "text-embedding-3-large", cancellationToken, timeoutSeconds);
-                case EmbeddingModelType.OpenAISmall:
-                default:
-                    return await CreateEmbeddingAsyncOpenAI(text, "text-embedding-3-small", cancellationToken, timeoutSeconds);
-            }
+            if (string.IsNullOrEmpty(text))
+                throw new ArgumentException("text is null or empty.", nameof(text));
+
+            return await CreateEmbeddingAsync(
+                EmbeddingInput.FromText(text),
+                model,
+                cancellationToken,
+                timeoutSeconds,
+                outputDimensionality);
         }
 
-        /// <summary>
-        /// 複数テキストをまとめて埋め込み生成する。
-        /// OpenAI は一括 API を利用し、Gemini は単一 API を順次呼び出す。
-        /// </summary>
+        public static async Task<SerializableEmbedding> CreateEmbeddingAsync(
+            EmbeddingInput input,
+            EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2,
+            CancellationToken cancellationToken = default,
+            int timeoutSeconds = -1,
+            int? outputDimensionality = null)
+        {
+            if (input == null) throw new ArgumentNullException(nameof(input));
+
+            var embeddings = await CreateEmbeddingsAsync(
+                new[] { input },
+                model,
+                cancellationToken,
+                timeoutSeconds,
+                outputDimensionality);
+
+            return embeddings?.FirstOrDefault();
+        }
+
         public static async Task<List<SerializableEmbedding>> CreateEmbeddingsAsync(
             IEnumerable<string> texts,
-            EmbeddingModelType model = EmbeddingModelType.Gemini01,
+            EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2,
             CancellationToken cancellationToken = default,
-            int timeoutSeconds = -1)
+            int timeoutSeconds = -1,
+            int? outputDimensionality = null)
         {
             if (texts == null) throw new ArgumentNullException(nameof(texts));
-            var inputs = texts.Where(t => !string.IsNullOrEmpty(t)).ToList();
-            if (inputs.Count == 0) throw new ArgumentException("texts is empty.", nameof(texts));
 
-            switch (model)
+            var inputs = texts
+                .Where(t => !string.IsNullOrEmpty(t))
+                .Select(EmbeddingInput.FromText)
+                .ToList();
+
+            if (inputs.Count == 0)
+                throw new ArgumentException("texts is empty.", nameof(texts));
+
+            return await CreateEmbeddingsAsync(
+                inputs,
+                model,
+                cancellationToken,
+                timeoutSeconds,
+                outputDimensionality);
+        }
+
+        public static async Task<List<SerializableEmbedding>> CreateEmbeddingsAsync(
+            IEnumerable<EmbeddingInput> inputs,
+            EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2,
+            CancellationToken cancellationToken = default,
+            int timeoutSeconds = -1,
+            int? outputDimensionality = null)
+        {
+            if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+
+            var normalizedInputs = inputs.Where(i => i != null).ToList();
+            if (normalizedInputs.Count == 0)
+                throw new ArgumentException("inputs is empty.", nameof(inputs));
+
+            var spec = GetModelSpec(model, outputDimensionality);
+            switch (spec.Provider)
             {
-                case EmbeddingModelType.Gemini01:
-                    return await CreateGeminiEmbeddingsAsync(inputs, null, cancellationToken, timeoutSeconds);
-                case EmbeddingModelType.Gemini01_1536:
-                    return await CreateGeminiEmbeddingsAsync(inputs, 1536, cancellationToken, timeoutSeconds);
-                case EmbeddingModelType.Gemini01_768:
-                    return await CreateGeminiEmbeddingsAsync(inputs, 768, cancellationToken, timeoutSeconds);
-                case EmbeddingModelType.OpenAILarge:
-                    return await CreateOpenAiEmbeddingsAsync(inputs, "text-embedding-3-large", cancellationToken, timeoutSeconds);
-                case EmbeddingModelType.OpenAISmall:
+                case EmbeddingProviderType.OpenAI:
+                    {
+                        var texts = ConvertToTextInputs(normalizedInputs, spec.ModelName);
+                        return await CreateOpenAiEmbeddingsAsync(
+                            texts,
+                            spec.ModelName,
+                            cancellationToken,
+                            timeoutSeconds,
+                            spec.OutputDimensionality);
+                    }
+                case EmbeddingProviderType.Gemini:
+                    ValidateGeminiInputs(normalizedInputs, spec);
+                    return await CreateGeminiEmbeddingsAsync(
+                        normalizedInputs,
+                        spec,
+                        cancellationToken,
+                        timeoutSeconds);
                 default:
-                    return await CreateOpenAiEmbeddingsAsync(inputs, "text-embedding-3-small", cancellationToken, timeoutSeconds);
+                    throw new NotSupportedException($"Unsupported embedding provider for {model}.");
             }
         }
 
-        #region OpenAI Embeddings
-
-        /// <summary>
-        /// OpenAI の埋め込みエンドポイントを呼び出す。
-        /// </summary>
-        /// <param name="text">埋め込み対象テキスト。</param>
-        /// <param name="modelName">OpenAI モデル名。</param>
         public static async Task<SerializableEmbedding> CreateEmbeddingAsyncOpenAI(
             string text,
             string modelName,
             CancellationToken cancellationToken = default,
-            int timeoutSeconds = -1)
+            int timeoutSeconds = -1,
+            int? outputDimensionality = null)
         {
             if (string.IsNullOrEmpty(text))
-                throw new ArgumentException("text が null または空です。");
+                throw new ArgumentException("text is null or empty.", nameof(text));
 
-            // API キーは AIManagerBehaviour と EditorUserSettings と 環境変数 の順に解決
-            var openAiKey = AIManager.OpenAIApiKey;
-            if (string.IsNullOrEmpty(openAiKey))
-                throw new InvalidOperationException("OpenAIApiKey が AIManagerBehaviour / EditorUserSettings / 環境変数のいずれにも設定されていません。");
+            var embeddings = await CreateOpenAiEmbeddingsAsync(
+                new[] { text },
+                modelName,
+                cancellationToken,
+                timeoutSeconds,
+                outputDimensionality);
 
-            var body = new Dictionary<string, object>
-            {
-                { "model", modelName},
-                { "input", text }
-            };
-
-            var jsonBody = JsonConvert.SerializeObject(body);
-
-            using (var req = new UnityWebRequest(openAiEmbeddingsEndpoint, "POST"))
-            {
-                byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonBody);
-                req.uploadHandler = new UploadHandlerRaw(bodyRaw);
-                req.downloadHandler = new DownloadHandlerBuffer();
-                req.SetRequestHeader("Content-Type", "application/json");
-                req.SetRequestHeader("Authorization", "Bearer " + openAiKey);
-
-                await UnityWebRequestUtils.SendAsync(req, cancellationToken, timeoutSeconds);
-
-                if (req.result != UnityWebRequest.Result.Success)
-                {
-                    Debug.LogError($"Embedding エラー: {req.error}");
-                    return null;
-                }
-
-                try
-                {
-                    var json = req.downloadHandler.text;
-                    var dto = JsonConvert.DeserializeObject<OpenAIEmbeddingResponse>(json);
-
-                    // Expected shape: data[0].embedding => float[]
-                    var list = dto?.data;
-                    if (list == null || list.Count == 0 || list[0].embedding == null)
-                    {
-                        Debug.LogError("Embedding レスポンスが空、または形式不正です。");
-                        return null;
-                    }
-
-                    var emb = new SerializableEmbedding(modelName);
-                    emb.SetFromFloatArray(list[0].embedding); // Copy raw vector values.
-                    return emb;
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogError("Embedding JSON パースエラー: " + ex.Message);
-                    return null;
-                }
-            }
+            return embeddings?.FirstOrDefault();
         }
 
         private static async Task<List<SerializableEmbedding>> CreateOpenAiEmbeddingsAsync(
             IReadOnlyList<string> texts,
             string modelName,
             CancellationToken cancellationToken,
-            int timeoutSeconds)
+            int timeoutSeconds,
+            int? outputDimensionality)
         {
             if (texts == null) throw new ArgumentNullException(nameof(texts));
-            if (texts.Count == 0) throw new ArgumentException("texts が空です。", nameof(texts));
+            if (texts.Count == 0) throw new ArgumentException("texts is empty.", nameof(texts));
 
             var openAiKey = AIManager.OpenAIApiKey;
             if (string.IsNullOrEmpty(openAiKey))
-                throw new InvalidOperationException("OpenAIApiKey が AIManagerBehaviour / EditorUserSettings / 環境変数のいずれにも設定されていません。");
+                throw new InvalidOperationException("OpenAIApiKey is not configured.");
 
             var body = new Dictionary<string, object>
             {
-                { "model", modelName},
+                { "model", modelName },
                 { "input", texts }
             };
 
+            if (outputDimensionality.HasValue)
+            {
+                body["dimensions"] = outputDimensionality.Value;
+            }
+
             var jsonBody = JsonConvert.SerializeObject(body);
 
-            using var req = new UnityWebRequest(openAiEmbeddingsEndpoint, "POST")
+            using var req = new UnityWebRequest(OpenAiEmbeddingsEndpoint, "POST")
             {
                 uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
                 downloadHandler = new DownloadHandlerBuffer()
@@ -195,7 +205,7 @@ namespace UnityLLMAPI.Embedding
 
             if (req.result != UnityWebRequest.Result.Success)
             {
-                Debug.LogError($"Embedding エラー: {req.error}");
+                Debug.LogError($"Embedding error: {req.error}");
                 return null;
             }
 
@@ -203,11 +213,10 @@ namespace UnityLLMAPI.Embedding
             {
                 var json = req.downloadHandler.text;
                 var dto = JsonConvert.DeserializeObject<OpenAIEmbeddingResponse>(json);
-
                 var list = dto?.data;
                 if (list == null || list.Count == 0)
                 {
-                    Debug.LogError("Embedding レスポンスが空、または形式不正です。");
+                    Debug.LogError("Embedding response is empty or malformed.");
                     return null;
                 }
 
@@ -215,87 +224,71 @@ namespace UnityLLMAPI.Embedding
                 foreach (var item in list)
                 {
                     if (item?.embedding == null) continue;
-                    var emb = new SerializableEmbedding(modelName);
-                    emb.SetFromFloatArray(item.embedding);
-                    embeddings.Add(emb);
+                    var embedding = new SerializableEmbedding(modelName);
+                    embedding.SetFromFloatArray(item.embedding);
+                    embeddings.Add(embedding);
                 }
+
                 return embeddings;
             }
             catch (Exception ex)
             {
-                Debug.LogError("Embedding JSON パースエラー: " + ex.Message);
+                Debug.LogError("Embedding JSON parse error: " + ex.Message);
                 return null;
             }
         }
 
-        #region DTO
-        [Serializable]
-        private class OpenAIEmbeddingResponse
+        private static async Task<List<SerializableEmbedding>> CreateGeminiEmbeddingsAsync(
+            IReadOnlyList<EmbeddingInput> inputs,
+            EmbeddingModelSpec spec,
+            CancellationToken cancellationToken,
+            int timeoutSeconds)
         {
-            public string @object;
-            public List<OpenAIEmbeddingData> data;
-            public OpenAIEmbeddingUsage usage;
-            public string model;
+            var result = new List<SerializableEmbedding>(inputs.Count);
+            foreach (var input in inputs)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var embedding = await CreateGeminiEmbeddingAsync(input, spec, cancellationToken, timeoutSeconds);
+                if (embedding != null)
+                {
+                    result.Add(embedding);
+                }
+            }
+
+            return result;
         }
 
-        [Serializable]
-        private class OpenAIEmbeddingData
+        private static async Task<SerializableEmbedding> CreateGeminiEmbeddingAsync(
+            EmbeddingInput input,
+            EmbeddingModelSpec spec,
+            CancellationToken cancellationToken,
+            int timeoutSeconds)
         {
-            public string @object;
-            public float[] embedding;
-            public int index;
-        }
-
-        [Serializable]
-        private class OpenAIEmbeddingUsage
-        {
-            public int prompt_tokens;
-            public int total_tokens;
-        }
-        #endregion
-        #endregion
-
-        #region Gemini Embeddings
-
-        /// <summary>
-        /// Gemini Embeddings API を呼び出す。
-        /// </summary>
-        private static async Task<SerializableEmbedding> CreateGeminiEmbeddingAsync(string text, int? outputDimensionality, CancellationToken cancellationToken, int timeoutSeconds)
-        {
-            if (string.IsNullOrEmpty(text))
-                throw new ArgumentException("text が null または空です。");
+            if (input == null) throw new ArgumentNullException(nameof(input));
 
             var googleKey = AIManager.GoogleApiKey;
             if (string.IsNullOrEmpty(googleKey))
-                throw new InvalidOperationException("GoogleApiKey が AIManagerBehaviour / EditorUserSettings / 環境変数のいずれにも設定されていません。");
+                throw new InvalidOperationException("GoogleApiKey is not configured.");
 
-            const string modelName = "models/gemini-embedding-001";
-            var body = new Dictionary<string, object>
-            {
-                { "model", modelName },
-                { "content", new Dictionary<string, object>{
-                    { "parts", new[]{ new Dictionary<string, string>{{ "text", text }} } }
-                }}
-            };
-            if (outputDimensionality.HasValue)
-            {
-                body["outputDimensionality"] = outputDimensionality.Value;
-            }
+            var body = GeminiEmbeddingPayloadBuilder.BuildRequestBody(
+                spec.ModelName,
+                input,
+                spec.OutputDimensionality);
 
-            string jsonBody = JsonConvert.SerializeObject(body);
-            using var req = new UnityWebRequest(geminiEmbeddingsEndpoint, "POST")
+            var jsonBody = JsonConvert.SerializeObject(body);
+            using var req = new UnityWebRequest(GeminiEmbeddingPayloadBuilder.BuildEndpoint(spec.ModelName), "POST")
             {
                 uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
                 downloadHandler = new DownloadHandlerBuffer()
             };
             req.SetRequestHeader("Content-Type", "application/json");
-
             req.SetRequestHeader("x-goog-api-key", googleKey);
+
             await UnityWebRequestUtils.SendAsync(req, cancellationToken, timeoutSeconds);
 
             if (req.result != UnityWebRequest.Result.Success)
             {
-                Debug.LogError($"Gemini Embedding エラー: {req.error}\n{req.downloadHandler?.text}");
+                Debug.LogError($"Gemini embedding error: {req.error}\n{req.downloadHandler?.text}");
                 return null;
             }
 
@@ -303,41 +296,100 @@ namespace UnityLLMAPI.Embedding
             {
                 var json = req.downloadHandler.text;
                 var dto = JsonConvert.DeserializeObject<GeminiEmbeddingResponse>(json);
-                var vec = dto?.embedding?.values;
-                if (vec == null)
+                var values = dto?.embedding?.values;
+                if (values == null)
                 {
-                    Debug.LogError("Gemini レスポンスに embedding.values が含まれていません。");
+                    Debug.LogError("Gemini response does not contain embedding.values.");
                     return null;
                 }
 
-                var emb = new SerializableEmbedding(modelName);
-                emb.SetFromFloatArray(vec);
-                return emb;
+                var embedding = new SerializableEmbedding(spec.ModelName);
+                embedding.SetFromFloatArray(values);
+                return embedding;
             }
             catch (Exception ex)
             {
-                Debug.LogError("Gemini Embedding のパースエラー: " + ex.Message);
+                Debug.LogError("Gemini embedding parse error: " + ex.Message);
                 return null;
             }
         }
 
-        private static async Task<List<SerializableEmbedding>> CreateGeminiEmbeddingsAsync(
-            IReadOnlyList<string> texts,
-            int? outputDimensionality,
-            CancellationToken cancellationToken,
-            int timeoutSeconds)
+        private static EmbeddingModelSpec GetModelSpec(EmbeddingModelType model, int? outputDimensionality)
         {
-            var result = new List<SerializableEmbedding>(texts.Count);
-            foreach (var text in texts)
+            var defaultDimensions = model switch
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var embedding = await CreateGeminiEmbeddingAsync(text, outputDimensionality, cancellationToken, timeoutSeconds);
-                if (embedding != null)
+                EmbeddingModelType.Gemini01_1536 => 1536,
+                EmbeddingModelType.Gemini01_768 => 768,
+                _ => (int?)null
+            };
+
+            var resolvedDimensions = outputDimensionality ?? defaultDimensions;
+
+            return model switch
+            {
+                EmbeddingModelType.OpenAISmall => new EmbeddingModelSpec(EmbeddingProviderType.OpenAI, "text-embedding-3-small", resolvedDimensions),
+                EmbeddingModelType.OpenAILarge => new EmbeddingModelSpec(EmbeddingProviderType.OpenAI, "text-embedding-3-large", resolvedDimensions),
+                EmbeddingModelType.Gemini01 => new EmbeddingModelSpec(EmbeddingProviderType.Gemini, "gemini-embedding-001", resolvedDimensions),
+                EmbeddingModelType.Gemini01_1536 => new EmbeddingModelSpec(EmbeddingProviderType.Gemini, "gemini-embedding-001", resolvedDimensions),
+                EmbeddingModelType.Gemini01_768 => new EmbeddingModelSpec(EmbeddingProviderType.Gemini, "gemini-embedding-001", resolvedDimensions),
+                EmbeddingModelType.GeminiEmbedding2 => new EmbeddingModelSpec(EmbeddingProviderType.Gemini, "gemini-embedding-2-preview", resolvedDimensions),
+                _ => throw new NotSupportedException($"Unsupported embedding model: {model}")
+            };
+        }
+
+        private static List<string> ConvertToTextInputs(IReadOnlyList<EmbeddingInput> inputs, string modelName)
+        {
+            var texts = new List<string>(inputs.Count);
+            foreach (var input in inputs)
+            {
+                if (!GeminiEmbeddingPayloadBuilder.TryConvertToText(input, out var text))
                 {
-                    result.Add(embedding);
+                    throw new NotSupportedException($"{modelName} only supports text embedding inputs in this library.");
+                }
+
+                texts.Add(text);
+            }
+
+            return texts;
+        }
+
+        private static void ValidateGeminiInputs(IReadOnlyList<EmbeddingInput> inputs, EmbeddingModelSpec spec)
+        {
+            if (spec.OutputDimensionality.HasValue && spec.OutputDimensionality.Value <= 0)
+            {
+                throw new ArgumentOutOfRangeException("outputDimensionality", "outputDimensionality must be greater than zero.");
+            }
+
+            if (spec.SupportsMultimodal && spec.OutputDimensionality.HasValue)
+            {
+                var dims = spec.OutputDimensionality.Value;
+                if (dims < 128 || dims > 3072)
+                {
+                    throw new ArgumentOutOfRangeException("outputDimensionality", "gemini-embedding-2 outputDimensionality must be between 128 and 3072.");
                 }
             }
-            return result;
+
+            if (spec.SupportsMultimodal) return;
+
+            foreach (var input in inputs)
+            {
+                if (GeminiEmbeddingPayloadBuilder.HasNonTextParts(input))
+                {
+                    throw new NotSupportedException($"{spec.ModelName} only supports text embedding inputs.");
+                }
+            }
+        }
+
+        [Serializable]
+        private class OpenAIEmbeddingResponse
+        {
+            public List<OpenAIEmbeddingData> data;
+        }
+
+        [Serializable]
+        private class OpenAIEmbeddingData
+        {
+            public float[] embedding;
         }
 
         [Serializable]
@@ -352,13 +404,6 @@ namespace UnityLLMAPI.Embedding
             public float[] values;
         }
 
-        #endregion
-
-        #region Cosine Similarity Helpers
-
-        /// <summary>
-        /// クエリベクトルとコーパス間のコサイン類似度を計算して降順ソートする。
-        /// </summary>
         public static List<SimilarityResult> RankByCosine(
             SerializableEmbedding query,
             IList<SerializableEmbedding> corpus,
@@ -373,13 +418,14 @@ namespace UnityLLMAPI.Embedding
                 var target = corpus[i];
                 if (!string.Equals(query.Model, target.Model) && logModelMismatchWarning && !modelMismatchLogged)
                 {
-                    Debug.LogWarning("Embedding のモデルが異なります。類似度は比較できない可能性があります。");
+                    Debug.LogWarning("Embedding model mismatch detected. Similarity may not be comparable.");
                     modelMismatchLogged = true;
                 }
 
                 float score = assumeNormalized ? query.Dot(target) : query.CosineSimilarity(target);
                 results.Add(new SimilarityResult(i, score));
             }
+
             results.Sort((a, b) => b.Score.CompareTo(a.Score));
             if (topK > 0 && topK < results.Count)
                 results.RemoveRange(topK, results.Count - topK);
@@ -398,6 +444,5 @@ namespace UnityLLMAPI.Embedding
                 Score = score;
             }
         }
-        #endregion
     }
 }

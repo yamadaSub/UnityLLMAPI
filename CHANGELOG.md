@@ -2,6 +2,21 @@
 
 このプロジェクトの重要な変更を記録します。
 
+## 1.2.6
+
+### 追加
+- Gemini 3.1 チャットモデル `AIModelType.Gemini31` / `gemini-3.1-pro-preview` を追加。
+- Gemini 3.1 画像生成モデル `AIModelType.Gemini31FlashImage` / `gemini-3.1-flash-image-preview` を追加。
+- Gemini 埋め込みモデル `EmbeddingModelType.GeminiEmbedding2` / `gemini-embedding-2-preview` を追加。
+- `EmbeddingInput` / `EmbeddingPart` を追加し、Gemini Embedding 2 に対するテキスト・画像・ファイル URI・inline data ベースのマルチモーダル入力に対応。
+- サンプル配布物に `Samples~/Example/API_REFERENCE.md` を追加。
+
+### 変更
+- 旧 `AIModelType.Gemini3` を廃止し、現行の `AIModelType.Gemini31` へ置き換え。
+- Gemini 埋め込みリクエストのモデル指定を動的化し、`gemini-embedding-001` 固定の実装を解消。
+- `EmbeddingManager.CreateEmbeddingAsync` / `CreateEmbeddingsAsync` の既定モデルを `GeminiEmbedding2` に変更し、`outputDimensionality` 指定を追加。
+- `GPT5Pro` を削除。現行実装は Chat Completions API ベースのため、Responses API 専用モデルは対象外。
+
 ## 1.2.5
 
 ### 追加
@@ -43,7 +58,7 @@
 
 ### 追加
 - **Gemini 3 対応**:
-    - チャット生成 (`Gemini3`) および画像生成 (`Gemini3ProImagePreview`) モデルを追加。
+    - Gemini 3 系のチャット生成モデルおよび画像生成 (`Gemini3ProImage`) モデルを追加。
 - **構造化出力の改良**:
     - 独自のバリデーション属性 (`[SchemaRange]`, `[SchemaRegularExpression]`) を導入し、`System.ComponentModel.DataAnnotations` への依存を排除。
 - **Embedding の最適化**:
