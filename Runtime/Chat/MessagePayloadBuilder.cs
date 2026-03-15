@@ -1,15 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
 
 namespace UnityLLMAPI.Chat
 {
     internal static class MessagePayloadBuilder
     {
-        /// <summary>
-        /// OpenAI 形式の messages 配列を構築する。
-        /// </summary>
         public static List<Dictionary<string, object>> BuildOpenAiMessages(List<Message> messages)
         {
             var result = new List<Dictionary<string, object>>();
@@ -39,9 +35,6 @@ namespace UnityLLMAPI.Chat
             return result;
         }
 
-        /// <summary>
-        /// OpenAI Chat API 用の content.parts を構築する。
-        /// </summary>
         public static List<Dictionary<string, object>> BuildOpenAiContentParts(Message message)
         {
             var parts = new List<Dictionary<string, object>>();
@@ -86,9 +79,126 @@ namespace UnityLLMAPI.Chat
             return parts;
         }
 
-        /// <summary>
-        /// Gemini 形式の contents 配列を構築する。
-        /// </summary>
+        public static string BuildAnthropicSystem(List<Message> messages)
+        {
+            if (messages == null || messages.Count == 0) return string.Empty;
+
+            var systemTexts = new List<string>();
+            foreach (var message in messages)
+            {
+                if (message == null || message.role != MessageRole.System) continue;
+
+                foreach (var part in message.EnumerateParts())
+                {
+                    if (part?.type != MessageContentType.Text) continue;
+                    if (string.IsNullOrWhiteSpace(part.text)) continue;
+                    systemTexts.Add(part.text);
+                }
+            }
+
+            return string.Join("\n\n", systemTexts);
+        }
+
+        public static List<Dictionary<string, object>> BuildAnthropicMessages(List<Message> messages)
+        {
+            var result = new List<Dictionary<string, object>>();
+            if (messages == null) return result;
+
+            foreach (var message in messages)
+            {
+                if (message == null || message.role == MessageRole.System) continue;
+
+                var blocks = BuildAnthropicContentBlocks(message);
+                if (blocks.Count == 0)
+                {
+                    blocks.Add(new Dictionary<string, object>
+                    {
+                        { "type", "text" },
+                        { "text", message.content ?? string.Empty }
+                    });
+                }
+
+                result.Add(new Dictionary<string, object>
+                {
+                    { "role", message.role.ToString().ToLowerInvariant() },
+                    { "content", blocks }
+                });
+            }
+
+            return result;
+        }
+
+        public static List<Dictionary<string, object>> BuildAnthropicContentBlocks(Message message)
+        {
+            var blocks = new List<Dictionary<string, object>>();
+            if (message == null) return blocks;
+
+            foreach (var part in message.EnumerateParts())
+            {
+                switch (part.type)
+                {
+                    case MessageContentType.Text:
+                        blocks.Add(new Dictionary<string, object>
+                        {
+                            { "type", "text" },
+                            { "text", part.text ?? string.Empty }
+                        });
+                        break;
+                    case MessageContentType.ImageUrl:
+                        {
+                            var url = part.uri;
+                            if (string.IsNullOrWhiteSpace(url)) break;
+
+                            if (TryParseDataUrl(url, out var mimeType, out var base64Data))
+                            {
+                                blocks.Add(new Dictionary<string, object>
+                                {
+                                    { "type", "image" },
+                                    { "source", new Dictionary<string, object>
+                                        {
+                                            { "type", "base64" },
+                                            { "media_type", string.IsNullOrEmpty(mimeType) ? (part.mimeType ?? "image/png") : mimeType },
+                                            { "data", base64Data }
+                                        }
+                                    }
+                                });
+                                break;
+                            }
+
+                            blocks.Add(new Dictionary<string, object>
+                            {
+                                { "type", "image" },
+                                { "source", new Dictionary<string, object>
+                                    {
+                                        { "type", "url" },
+                                        { "url", url }
+                                    }
+                                }
+                            });
+                            break;
+                        }
+                    case MessageContentType.ImageData:
+                        {
+                            if (!part.HasData) break;
+                            blocks.Add(new Dictionary<string, object>
+                            {
+                                { "type", "image" },
+                                { "source", new Dictionary<string, object>
+                                    {
+                                        { "type", "base64" },
+                                        { "media_type", string.IsNullOrEmpty(part.mimeType) ? "image/png" : part.mimeType },
+                                        { "data", Convert.ToBase64String(part.data) }
+                                    }
+                                }
+                            });
+                            break;
+                        }
+                }
+            }
+
+            return blocks;
+        }
+
         public static List<Dictionary<string, object>> BuildGeminiContents(List<Message> messages)
         {
             var contents = new List<Dictionary<string, object>>();
@@ -114,9 +224,6 @@ namespace UnityLLMAPI.Chat
             return contents;
         }
 
-        /// <summary>
-        /// Gemini 用の parts を構築する。
-        /// </summary>
         public static List<object> BuildGeminiParts(Message message)
         {
             var parts = new List<object>();
@@ -178,9 +285,6 @@ namespace UnityLLMAPI.Chat
             return parts;
         }
 
-        /// <summary>
-        /// Gemini function_declarations.parameters の互換性を保つためのサニタイズ。
-        /// </summary>
         public static object SanitizeGeminiParameters(object parameters)
         {
             try
@@ -193,14 +297,14 @@ namespace UnityLLMAPI.Chat
                         {
                             foreach (var key in props.Keys.ToList())
                             {
-                                if (props[key] is Dictionary<string, object> p)
+                                if (props[key] is Dictionary<string, object> property)
                                 {
-                                    var typeStr = p.TryGetValue("type", out var pType) ? pType?.ToString() : null;
+                                    var typeStr = property.TryGetValue("type", out var propertyType) ? propertyType?.ToString() : null;
                                     if (!string.Equals(typeStr, "string", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        if (p.ContainsKey("enum")) p.Remove("enum");
+                                        if (property.ContainsKey("enum")) property.Remove("enum");
                                     }
-                                    props[key] = p;
+                                    props[key] = property;
                                 }
                             }
                             dict["properties"] = props;
@@ -216,9 +320,6 @@ namespace UnityLLMAPI.Chat
             return parameters;
         }
 
-        /// <summary>
-        /// MessageContent 内の画像バイト列を data:URL に変換する。
-        /// </summary>
         private static string ConvertImageContentToDataUrl(MessageContent part)
         {
             if (part == null || !part.HasData) return string.Empty;
@@ -226,9 +327,6 @@ namespace UnityLLMAPI.Chat
             return $"data:{mime};base64,{Convert.ToBase64String(part.data)}";
         }
 
-        /// <summary>
-        /// data:URL 形式を解析し、MIME と base64 本体を取り出す。
-        /// </summary>
         private static bool TryParseDataUrl(string uri, out string mimeType, out string base64Data)
         {
             mimeType = null;

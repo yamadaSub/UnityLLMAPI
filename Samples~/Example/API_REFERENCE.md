@@ -27,6 +27,7 @@ Set your API keys before running the samples:
 
 - OpenAI: `OPENAI_API_KEY`
 - Grok: `GROK_API_KEY`
+- Anthropic: `ANTHROPIC_API_KEY`
 - Gemini: `GOOGLE_API_KEY`
 
 In the Unity Editor you can also use:
@@ -56,8 +57,11 @@ Useful chat-oriented models:
 
 - `AIModelType.Gemini25Flash`
 - `AIModelType.Gemini31`
+- `AIModelType.ClaudeSonnet46`
+- `AIModelType.ClaudeOpus46`
 - `AIModelType.GPT4o`
 - `AIModelType.GPT5`
+- `AIModelType.GPT5_4`
 - `AIModelType.Grok4_1`
 
 ## Streaming Chat
@@ -103,7 +107,7 @@ var messages = new List<Message>
     }
 };
 
-var reply = await AIManager.SendMessageAsync(messages, AIModelType.GPT4o);
+var reply = await AIManager.SendMessageAsync(messages, AIModelType.ClaudeSonnet46);
 ```
 
 Image helpers:
@@ -111,6 +115,9 @@ Image helpers:
 - `MessageContent.FromImage(Texture texture, ...)`
 - `MessageContent.FromImageData(byte[] data, string mime)`
 - `MessageContent.FromImageUrl(string url, string mime = null)`
+
+Vision-capable chat models include `ClaudeSonnet46`, `ClaudeOpus46`, `GPT4o`,
+`Gemini25Flash`, and `Gemini31`.
 
 ## Structured Output
 
@@ -141,6 +148,63 @@ var result = await AIManager.SendStructuredMessageAsync<EnemyConfig>(
 
 Debug.Log(result?.name);
 ```
+
+When the candidate list is only known at runtime, keep using the same
+`SendStructuredMessageAsync(...)` pipeline and pass a target instance that carries
+the dynamic enum subset:
+
+```csharp
+using System;
+using System.Collections.Generic;
+using UnityLLMAPI.Chat;
+using UnityLLMAPI.Schema;
+
+public enum EnemyAction
+{
+    Attack,
+    Guard,
+    Heal,
+    Flee
+}
+
+[Serializable]
+public class ActionChoice
+{
+    [SchemaIgnore]
+    public EnemyAction[] availableActions;
+
+    [DynamicAllowedValues(nameof(availableActions))]
+    public EnemyAction selectedAction;
+}
+
+var choice = new ActionChoice
+{
+    availableActions = new[] { EnemyAction.Attack, EnemyAction.Heal, EnemyAction.Flee }
+};
+
+var messages = new List<Message>
+{
+    new Message
+    {
+        role = MessageRole.User,
+        content = "Pick exactly one action for a badly injured enemy."
+    }
+};
+
+await AIManager.SendStructuredMessageAsync(
+    choice,
+    messages,
+    AIModelType.Gemini25Flash);
+
+Debug.Log(choice.selectedAction);
+```
+
+Notes:
+
+- `SchemaIgnore` keeps helper members like `availableActions` out of the generated schema.
+- `DynamicAllowedValues` converts the referenced runtime values into a JSON Schema `enum`.
+- Regular enum fields and `List<Enum>` fields are also emitted as string enums now.
+- For enum targets, the runtime values must match the enum member names that `JsonConvert` will deserialize.
 
 ## Function Calling
 

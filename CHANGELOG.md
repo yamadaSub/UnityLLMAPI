@@ -2,6 +2,21 @@
 
 このプロジェクトの重要な変更を記録します。
 
+## 1.2.7
+
+### 追加
+- Anthropic provider を Messages API ベースで追加。
+- `AIModelType.ClaudeSonnet46` / `claude-sonnet-4-6` を追加。
+- `AIModelType.ClaudeOpus46` / `claude-opus-4-6` を追加。
+- `AIModelType.GPT5_4` / `gpt-5.4` を追加。
+- Anthropic のマルチモーダル入力に対応し、テキストと画像 URL / 画像バイト列を同じ `Message.parts` から送信可能に。
+- Anthropic の Function Calling に対応し、`tools` / `tool_choice` 形式をサポート。
+- `AIManagerBehaviour` / `ApiKeyResolver` / Editor の API key 設定ウィンドウで `ANTHROPIC_API_KEY` を扱えるように追加。
+
+### 変更
+- `SendStructuredMessageAsync` の structured payload 抽出を provider ごとに切り替えるように変更し、Anthropic でも既存 API で structured output を扱えるように修正。
+- サンプル API リファレンスに Anthropic の API key と Claude の chat / vision モデル候補を追加。
+
 ## 1.2.6
 
 ### 追加
@@ -15,7 +30,6 @@
 - 旧 `AIModelType.Gemini3` を廃止し、現行の `AIModelType.Gemini31` へ置き換え。
 - Gemini 埋め込みリクエストのモデル指定を動的化し、`gemini-embedding-001` 固定の実装を解消。
 - `EmbeddingManager.CreateEmbeddingAsync` / `CreateEmbeddingsAsync` の既定モデルを `GeminiEmbedding2` に変更し、`outputDimensionality` 指定を追加。
-- `GPT5Pro` を削除。現行実装は Chat Completions API ベースのため、Responses API 専用モデルは対象外。
 
 ## 1.2.5
 

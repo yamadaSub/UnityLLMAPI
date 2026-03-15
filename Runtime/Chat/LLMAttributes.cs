@@ -55,6 +55,28 @@ namespace UnityLLMAPI.Schema
     }
 
     /// <summary>
+    /// 実行時に別メンバーから allowed values を解決する属性。
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+    public sealed class DynamicAllowedValuesAttribute : Attribute
+    {
+        public string SourceMemberName { get; }
+
+        public DynamicAllowedValuesAttribute(string sourceMemberName)
+        {
+            SourceMemberName = sourceMemberName;
+        }
+    }
+
+    /// <summary>
+    /// 自動 JSON Schema 生成の対象から除外する属性。
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]
+    public sealed class SchemaIgnoreAttribute : Attribute
+    {
+    }
+
+    /// <summary>
     /// JSON Schema の multipleOf 制約を付与する属性。
     /// </summary>
     [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field)]

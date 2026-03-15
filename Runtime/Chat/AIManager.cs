@@ -23,6 +23,7 @@ public enum AIModelType
     GPT4o = 0,
     GPT5 = 1,
     GPT5_2 = 13,
+    GPT5_4 = 19,
     GPT5Mini = 2,
     Grok2 = 4,
     Grok3 = 5,
@@ -35,7 +36,9 @@ public enum AIModelType
     Gemini31 = 10,
     Gemini3ProImage = 11,
     Gemini25FlashImage = 12,
-    Gemini31FlashImage = 16
+    Gemini31FlashImage = 16,
+    ClaudeSonnet46 = 17,
+    ClaudeOpus46 = 18
 }
 
 /// <summary>
@@ -223,6 +226,7 @@ public static class AIManager
     public static string OpenAIApiKey => ApiKeyResolver.OpenAIApiKey;
     public static string GrokApiKey => ApiKeyResolver.GrokApiKey;
     public static string GoogleApiKey => ApiKeyResolver.GoogleApiKey;
+    public static string AnthropicApiKey => ApiKeyResolver.AnthropicApiKey;
 
     internal static void RegisterBehaviour(AIManagerBehaviour behaviour) => ApiKeyResolver.RegisterBehaviour(behaviour);
     internal static void UnregisterBehaviour(AIManagerBehaviour behaviour) => ApiKeyResolver.UnregisterBehaviour(behaviour);
@@ -386,7 +390,7 @@ public static class AIManager
         System.Threading.CancellationToken cancellationToken = default,
         int timeoutSeconds = -1)
     {
-        var content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody, cancellationToken, timeoutSeconds);
+        var content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody, cancellationToken, timeoutSeconds, null);
         if (string.IsNullOrEmpty(content))
         {
             return default;
@@ -415,7 +419,7 @@ public static class AIManager
     {
         if (targetInstance == null) throw new ArgumentNullException(nameof(targetInstance));
 
-        var content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody, cancellationToken, timeoutSeconds);
+        var content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody, cancellationToken, timeoutSeconds, targetInstance);
         if (!string.IsNullOrEmpty(content))
         {
             Newtonsoft.Json.JsonConvert.PopulateObject(content, targetInstance);
@@ -549,17 +553,18 @@ public static class AIManager
         AIModelType model,
         Dictionary<string, object> initBody,
         System.Threading.CancellationToken cancellationToken,
-        int timeoutSeconds)
+        int timeoutSeconds,
+        object schemaSource)
     {
         var spec = ModelRegistry.Get(model);
         EnsureCapability(spec, AICapabilities.JsonSchema);
 
-        var schema = UnityLLMAPI.Schema.JsonSchemaGenerator.GenerateSchema<T>();
+        var schema = UnityLLMAPI.Schema.JsonSchemaGenerator.GenerateSchema<T>(schemaSource: schemaSource);
         var schemaJson = Newtonsoft.Json.JsonConvert.SerializeObject(schema);
         var raw = await SendStructuredRawAsync(messages, spec, schemaJson, initBody, cancellationToken, timeoutSeconds);
         if (IsFailed(raw, spec)) return null;
 
-        return ChatResultParser.ExtractAssistantMessage(raw);
+        return ChatResultParser.ExtractStructuredContent(raw);
     }
 
     /// <summary>

@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 
@@ -22,22 +24,21 @@ namespace UnityLLMAPI.Schema
         private static readonly Dictionary<Type, Dictionary<string, object>> SchemaCache = new Dictionary<Type, Dictionary<string, object>>();
         private static readonly object CacheLock = new object();
 
-        /* CLR 型 -> enum 変換。リフレクション側だけが使う */
-        private static SchemaParameterType ToSchemaParameterType(Type t)
+        private static SchemaParameterType ToSchemaParameterType(Type type)
         {
-            if (t == typeof(string)) return SchemaParameterType.String;
-            if (t == typeof(bool)) return SchemaParameterType.Boolean;
-            if (t == typeof(DateTime)) return SchemaParameterType.DateTime;
-            if (t.IsPrimitive || t == typeof(decimal) ||
-                t == typeof(double) || t == typeof(float))
+            type = Nullable.GetUnderlyingType(type) ?? type;
+
+            if (type == typeof(string) || type.IsEnum) return SchemaParameterType.String;
+            if (type == typeof(bool)) return SchemaParameterType.Boolean;
+            if (type == typeof(DateTime)) return SchemaParameterType.DateTime;
+            if (type.IsPrimitive || type == typeof(decimal) || type == typeof(double) || type == typeof(float))
+            {
                 return SchemaParameterType.Number;
-            // それ以外は None として扱う(ArrayやObject,Enum)
+            }
+
             return SchemaParameterType.None;
         }
 
-        /* ------------------------------------------------------------------
-         * ② properties / required をまとめて「完成形」にする
-         * ------------------------------------------------------------------ */
         public static Dictionary<string, object> BuildObjectSchema(
             IEnumerable<(string key, Dictionary<string, object> schema)> members)
         {
@@ -46,101 +47,311 @@ namespace UnityLLMAPI.Schema
 
             foreach (var (key, schema) in members)
             {
-                if (schema == null) continue;   // optional
+                if (schema == null) continue;
                 properties[key] = schema;
                 required.Add(key);
             }
 
-            return new Dictionary<string, object>{
+            return new Dictionary<string, object>
+            {
                 { "type", "object" },
                 { "properties", properties },
                 { "required", required }
             };
         }
 
-        /* ------------------------------------------------------------------
-         * ③ 既存API: 型 T -> JSON-Schema
-         * ------------------------------------------------------------------ */
-        public static Dictionary<string, object> GenerateSchema<T>(string schemaName = null)
+        public static Dictionary<string, object> GenerateSchema<T>(string schemaName = null, object schemaSource = null)
         {
-            string name = string.IsNullOrEmpty(schemaName)
-                        ? "schema" : schemaName;
-            return new Dictionary<string, object>{
+            string name = string.IsNullOrEmpty(schemaName) ? "schema" : schemaName;
+            return new Dictionary<string, object>
+            {
                 { "name", name },
-                { "schema", GenerateSchema(typeof(T))}
+                { "schema", GenerateSchema(typeof(T), schemaSource) }
             };
         }
 
-        public static Dictionary<string, object> GenerateSchema(Type type)
+        public static Dictionary<string, object> GenerateSchema(Type type, object schemaSource = null)
         {
-            lock (CacheLock)
+            if (type == null) throw new ArgumentNullException(nameof(type));
+
+            if (schemaSource == null)
             {
-                if (SchemaCache.TryGetValue(type, out var cached))
+                lock (CacheLock)
                 {
-                    return CloneSchema(cached);
+                    if (SchemaCache.TryGetValue(type, out var cached))
+                    {
+                        return CloneSchema(cached);
+                    }
                 }
             }
 
-            var members = new List<(string, Dictionary<string, object>)>();
+            var schema = BuildSchemaForType(type, schemaSource, new HashSet<Type>());
 
-            foreach (var m in type.GetMembers(BindingFlags.Public | BindingFlags.Instance))
+            if (schemaSource == null)
             {
-                Type mt = m switch
+                lock (CacheLock)
                 {
-                    PropertyInfo p => p.PropertyType,
-                    FieldInfo f => f.FieldType,
-                    _ => null
-                };
-                if (mt == null) continue;
-
-                var desc = m.GetCustomAttribute<DescriptionAttribute>()?.Description;
-                var allowedValue = m.GetCustomAttribute<AllowedValuesAttribute>()?.Values;
-                if (allowedValue == null && mt.IsEnum)
-                {
-                    allowedValue = Enum.GetNames(mt);
+                    SchemaCache[type] = CloneSchema(schema);
                 }
-                if (mt.IsArrayOrList(out Type elementType))
+            }
+
+            return CloneSchema(schema);
+        }
+
+        private static Dictionary<string, object> BuildSchemaForType(
+            Type type,
+            object schemaSource,
+            HashSet<Type> visitedTypes)
+        {
+            type = Nullable.GetUnderlyingType(type) ?? type;
+
+            if (!visitedTypes.Add(type))
+            {
+                return new Dictionary<string, object>
                 {
-                    // 配列の場合
-                    var elementSchemaType = ToSchemaParameterType(elementType);
-                    Dictionary<string, object> itemSchema;
-                    if (elementSchemaType == SchemaParameterType.None)
+                    { "type", "object" }
+                };
+            }
+
+            try
+            {
+                var members = new List<(string, Dictionary<string, object>)>();
+
+                foreach (var member in GetSchemaMembers(type))
+                {
+                    if (member.GetCustomAttribute<SchemaIgnoreAttribute>() != null) continue;
+                    if (!TryGetMemberType(member, out var memberType)) continue;
+
+                    var memberSchema = CreateMemberSchema(member, memberType, schemaSource, visitedTypes);
+                    if (memberSchema != null)
                     {
-                        itemSchema = GenerateSchema(elementType);
+                        members.Add((member.Name, memberSchema));
                     }
-                    else
-                    {
-                        itemSchema = CreatePrimitiveSchema(elementSchemaType);
-                    }
-                    var arraySchema = new Dictionary<string, object>
-                        {
-                            { "type", "array" },
-                            { "items", itemSchema }
-                        };
-                    if (!string.IsNullOrEmpty(desc)) arraySchema["description"] = desc;
-                    members.Add((m.Name, arraySchema));
+                }
+
+                return BuildObjectSchema(members);
+            }
+            finally
+            {
+                visitedTypes.Remove(type);
+            }
+        }
+
+        private static IEnumerable<MemberInfo> GetSchemaMembers(Type type)
+        {
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.Instance;
+
+            foreach (var field in type.GetFields(flags))
+            {
+                yield return field;
+            }
+
+            foreach (var property in type.GetProperties(flags))
+            {
+                if (!property.CanRead) continue;
+                if (property.GetIndexParameters().Length > 0) continue;
+                yield return property;
+            }
+        }
+
+        private static Dictionary<string, object> CreateMemberSchema(
+            MemberInfo member,
+            Type memberType,
+            object schemaSource,
+            HashSet<Type> visitedTypes)
+        {
+            memberType = Nullable.GetUnderlyingType(memberType) ?? memberType;
+
+            var description = member.GetCustomAttribute<DescriptionAttribute>()?.Description;
+            var rangeAttribute = member.GetCustomAttribute<SchemaRangeAttribute>();
+            var regexAttribute = member.GetCustomAttribute<SchemaRegularExpressionAttribute>();
+            var multipleOf = member.GetCustomAttribute<SchemaMultipleOfAttribute>()?.Step;
+            double? minimum = rangeAttribute != null ? rangeAttribute.Minimum : (double?)null;
+            double? maximum = rangeAttribute != null ? rangeAttribute.Maximum : (double?)null;
+            string pattern = regexAttribute?.Pattern;
+
+            if (memberType.IsArrayOrList(out var elementType))
+            {
+                elementType = Nullable.GetUnderlyingType(elementType) ?? elementType;
+                var itemType = ToSchemaParameterType(elementType);
+                Dictionary<string, object> itemSchema;
+
+                if (itemType == SchemaParameterType.None)
+                {
+                    itemSchema = BuildSchemaForType(elementType, null, visitedTypes);
                 }
                 else
                 {
-                    // 通常のプリミティブ
-                    var elementSchemaType = ToSchemaParameterType(mt);
-                    var rangeAttr = m.GetCustomAttribute<SchemaRangeAttribute>();
-                    var regexAttr = m.GetCustomAttribute<SchemaRegularExpressionAttribute>();
-                    var multipleOf = m.GetCustomAttribute<SchemaMultipleOfAttribute>()?.Step;
-                    double? minVal = rangeAttr != null ? rangeAttr.Minimum : (double?)null;
-                    double? maxVal = rangeAttr != null ? rangeAttr.Maximum : (double?)null;
-                    string pat = regexAttr?.Pattern;
-
-                    members.Add((m.Name, CreatePrimitiveSchema(elementSchemaType, desc, allowedValue, minVal, maxVal, pat, multipleOf)));
+                    var enumValues = ResolveAllowedValues(member, elementType, schemaSource);
+                    itemSchema = CreatePrimitiveSchema(itemType, enumValues: enumValues);
                 }
+
+                var arraySchema = new Dictionary<string, object>
+                {
+                    { "type", "array" },
+                    { "items", itemSchema }
+                };
+
+                if (!string.IsNullOrEmpty(description))
+                {
+                    arraySchema["description"] = description;
+                }
+
+                return arraySchema;
             }
 
-            var schema = BuildObjectSchema(members);
-            lock (CacheLock)
+            var schemaType = ToSchemaParameterType(memberType);
+            if (schemaType == SchemaParameterType.None)
             {
-                SchemaCache[type] = schema;
+                var nestedSchemaSource = GetNestedSchemaSource(schemaSource, member);
+                var objectSchema = BuildSchemaForType(memberType, nestedSchemaSource, visitedTypes);
+                if (!string.IsNullOrEmpty(description))
+                {
+                    objectSchema["description"] = description;
+                }
+                return objectSchema;
             }
-            return CloneSchema(schema);
+
+            var allowedValues = ResolveAllowedValues(member, memberType, schemaSource);
+            return CreatePrimitiveSchema(schemaType, description, allowedValues, minimum, maximum, pattern, multipleOf);
+        }
+
+        private static bool TryGetMemberType(MemberInfo member, out Type memberType)
+        {
+            switch (member)
+            {
+                case PropertyInfo property:
+                    memberType = property.PropertyType;
+                    return true;
+                case FieldInfo field:
+                    memberType = field.FieldType;
+                    return true;
+                default:
+                    memberType = null;
+                    return false;
+            }
+        }
+
+        private static object GetNestedSchemaSource(object schemaSource, MemberInfo member)
+        {
+            if (schemaSource == null) return null;
+            return TryGetMemberValue(schemaSource, member.Name, out var value) ? value : null;
+        }
+
+        private static string[] ResolveAllowedValues(MemberInfo member, Type valueType, object schemaSource)
+        {
+            var dynamicValues = ResolveDynamicAllowedValues(member, schemaSource);
+            if (dynamicValues != null && dynamicValues.Length > 0)
+            {
+                return dynamicValues;
+            }
+
+            var allowedValues = member.GetCustomAttribute<AllowedValuesAttribute>()?.Values;
+            if (allowedValues != null && allowedValues.Length > 0)
+            {
+                return allowedValues;
+            }
+
+            valueType = Nullable.GetUnderlyingType(valueType) ?? valueType;
+            if (valueType.IsEnum)
+            {
+                return Enum.GetNames(valueType);
+            }
+
+            return null;
+        }
+
+        private static string[] ResolveDynamicAllowedValues(MemberInfo member, object schemaSource)
+        {
+            if (schemaSource == null) return null;
+
+            var attribute = member.GetCustomAttribute<DynamicAllowedValuesAttribute>();
+            if (attribute == null || string.IsNullOrEmpty(attribute.SourceMemberName))
+            {
+                return null;
+            }
+
+            if (!TryGetMemberValue(schemaSource, attribute.SourceMemberName, out var sourceValue))
+            {
+                return null;
+            }
+
+            return ConvertAllowedValuesToStrings(sourceValue);
+        }
+
+        private static bool TryGetMemberValue(object instance, string memberName, out object value)
+        {
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+            var type = instance.GetType();
+
+            var property = type.GetProperty(memberName, flags);
+            if (property != null && property.CanRead && property.GetIndexParameters().Length == 0)
+            {
+                value = property.GetValue(instance);
+                return true;
+            }
+
+            var field = type.GetField(memberName, flags);
+            if (field != null)
+            {
+                value = field.GetValue(instance);
+                return true;
+            }
+
+            value = null;
+            return false;
+        }
+
+        private static string[] ConvertAllowedValuesToStrings(object value)
+        {
+            if (value == null) return null;
+
+            if (value is string text)
+            {
+                return string.IsNullOrEmpty(text) ? Array.Empty<string>() : new[] { text };
+            }
+
+            if (value is IEnumerable enumerable && !(value is IDictionary))
+            {
+                var values = new List<string>();
+                foreach (var item in enumerable)
+                {
+                    if (TryConvertAllowedValueToString(item, out var converted))
+                    {
+                        values.Add(converted);
+                    }
+                }
+
+                return values.Count == 0
+                    ? null
+                    : values.Distinct(StringComparer.Ordinal).ToArray();
+            }
+
+            return TryConvertAllowedValueToString(value, out var singleValue)
+                ? new[] { singleValue }
+                : null;
+        }
+
+        private static bool TryConvertAllowedValueToString(object value, out string result)
+        {
+            if (value == null)
+            {
+                result = null;
+                return false;
+            }
+
+            switch (value)
+            {
+                case string text:
+                    result = text;
+                    return !string.IsNullOrEmpty(result);
+                case Enum enumValue:
+                    result = enumValue.ToString();
+                    return true;
+                default:
+                    result = Convert.ToString(value, CultureInfo.InvariantCulture);
+                    return !string.IsNullOrEmpty(result);
+            }
         }
 
         public static Dictionary<string, object> CreatePrimitiveSchema(
@@ -184,7 +395,6 @@ namespace UnityLLMAPI.Schema
                     schema["format"] = "date-time";
                     break;
                 default:
-                    // fallback
                     schema["type"] = "string";
                     break;
             }
@@ -213,6 +423,17 @@ namespace UnityLLMAPI.Schema
             {
                 case null:
                     return null;
+                case string[] stringArray:
+                    return (string[])stringArray.Clone();
+                case Array array:
+                    {
+                        var copied = new object[array.Length];
+                        for (int i = 0; i < array.Length; i++)
+                        {
+                            copied[i] = CloneValue(array.GetValue(i));
+                        }
+                        return copied;
+                    }
                 case IList<string> stringList:
                     return new List<string>(stringList);
                 case IList list:
@@ -232,40 +453,44 @@ namespace UnityLLMAPI.Schema
         }
     }
 
-
-
     public static class TypeExtend
     {
-        public static bool IsArrayOrList(this Type t, out Type elementType)
+        public static bool IsArrayOrList(this Type type, out Type elementType)
         {
-            if (t.IsArray)
+            type = Nullable.GetUnderlyingType(type) ?? type;
+
+            if (type.IsArray)
             {
-                elementType = t.GetElementType();
+                elementType = type.GetElementType();
                 return true;
             }
-            if (t.IsGenericType)
+
+            if (type.IsGenericType)
             {
-                var genericType = t.GetGenericTypeDefinition();
-                if (genericType == typeof(List<>) || genericType == typeof(IList<>) || genericType == typeof(IEnumerable<>))
+                var genericType = type.GetGenericTypeDefinition();
+                if (genericType == typeof(List<>)
+                    || genericType == typeof(IList<>)
+                    || genericType == typeof(IEnumerable<>))
                 {
-                    elementType = t.GetGenericArguments()[0];
+                    elementType = type.GetGenericArguments()[0];
                     return true;
                 }
             }
+
             elementType = null;
             return false;
         }
 
-        public static bool IsDictionary(this Type t, out Type keyType, out Type valueType)
+        public static bool IsDictionary(this Type type, out Type keyType, out Type valueType)
         {
-            if (t.IsGenericType && typeof(IDictionary<,>).IsAssignableFrom(t.GetGenericTypeDefinition()))
+            if (type.IsGenericType && typeof(IDictionary<,>).IsAssignableFrom(type.GetGenericTypeDefinition()))
             {
-                keyType = t.GetGenericArguments()[0];
-                valueType = t.GetGenericArguments()[1];
+                keyType = type.GetGenericArguments()[0];
+                valueType = type.GetGenericArguments()[1];
                 return true;
             }
 
-            foreach (var iface in t.GetInterfaces())
+            foreach (var iface in type.GetInterfaces())
             {
                 if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IDictionary<,>))
                 {
@@ -282,6 +507,7 @@ namespace UnityLLMAPI.Schema
 
         public static bool IsSimple(this Type type)
         {
+            type = Nullable.GetUnderlyingType(type) ?? type;
             return type.IsPrimitive
                 || type.IsEnum
                 || type == typeof(string)
@@ -289,82 +515,83 @@ namespace UnityLLMAPI.Schema
                 || type == typeof(decimal);
         }
 
-        public static string ToMarkdown(this Type t)
+        public static string ToMarkdown(this Type type)
         {
-            var sb = new StringBuilder();
+            var builder = new StringBuilder();
             var visited = new HashSet<Type>();
-            AppendTypeMarkdown(sb, t, visited, 1);
-            return sb.ToString();
+            AppendTypeMarkdown(builder, type, visited, 1);
+            return builder.ToString();
         }
 
-        private static void AppendTypeMarkdown(StringBuilder sb, Type t, HashSet<Type> visited, int level)
+        private static void AppendTypeMarkdown(StringBuilder builder, Type type, HashSet<Type> visited, int level)
         {
-            if (visited.Contains(t))
+            type = Nullable.GetUnderlyingType(type) ?? type;
+
+            if (visited.Contains(type))
             {
-                sb.AppendLine($"{new string(' ', level * 2)}- **{t.Name}** (再帰参照のため省略)");
+                builder.AppendLine($"{new string(' ', level * 2)}- **{type.Name}** (recursive reference)");
                 return;
             }
 
-            visited.Add(t);
+            visited.Add(type);
 
-            // Enum自体が対象型の場合
-            if (t.IsEnum)
+            if (type.IsEnum)
             {
-                sb.AppendLine($"{new string(' ', level * 2)}- **Enum: {t.Name}**");
-                var enumFields = t.GetFields(BindingFlags.Public | BindingFlags.Static);
+                builder.AppendLine($"{new string(' ', level * 2)}- **Enum: {type.Name}**");
+                var enumFields = type.GetFields(BindingFlags.Public | BindingFlags.Static);
                 foreach (var field in enumFields)
                 {
-                    var desc = field.GetCustomAttribute<DescriptionAttribute>()?.Description ?? field.Name;
-                    sb.AppendLine($"{new string(' ', (level + 1) * 2)}- `{field.Name}`: {desc}");
+                    var description = field.GetCustomAttribute<DescriptionAttribute>()?.Description ?? field.Name;
+                    builder.AppendLine($"{new string(' ', (level + 1) * 2)}- `{field.Name}`: {description}");
                 }
                 return;
             }
 
-            sb.AppendLine($"{new string(' ', level * 2)}- **Type: {t.Name}**");
-            var fields = t.GetFields(BindingFlags.Public | BindingFlags.Instance);
+            builder.AppendLine($"{new string(' ', level * 2)}- **Type: {type.Name}**");
+            var fields = type.GetFields(BindingFlags.Public | BindingFlags.Instance);
 
             foreach (var field in fields)
             {
-                var fieldDesc = field.GetCustomAttribute<DescriptionAttribute>()?.Description ?? field.Name;
-                var fieldType = field.FieldType;
+                var description = field.GetCustomAttribute<DescriptionAttribute>()?.Description ?? field.Name;
+                var fieldType = Nullable.GetUnderlyingType(field.FieldType) ?? field.FieldType;
 
-                // Dictionary<K,V>
                 if (fieldType.IsDictionary(out Type keyType, out Type valueType))
                 {
-                    sb.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`Dictionary<{keyType.Name}, {valueType.Name}>`): {fieldDesc}");
+                    builder.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`Dictionary<{keyType.Name}, {valueType.Name}>`): {description}");
                     if (!IsSimple(valueType))
-                        AppendTypeMarkdown(sb, valueType, visited, level + 2);
-                    continue;
-                }
-
-                // Array/List
-                if (fieldType.IsArrayOrList(out var elementType))
-                {
-                    sb.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`List<{elementType.Name}>`): {fieldDesc}");
-                    if (!IsSimple(elementType))
-                        AppendTypeMarkdown(sb, elementType, visited, level + 2);
-                    continue;
-                }
-
-                // Enum フィールド
-                if (fieldType.IsEnum)
-                {
-                    sb.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`Enum {fieldType.Name}`): {fieldDesc}");
-                    var enumFields = fieldType.GetFields(BindingFlags.Public | BindingFlags.Static);
-                    foreach (var enumField in enumFields)
                     {
-                        var enumDesc = enumField.GetCustomAttribute<DescriptionAttribute>()?.Description ?? enumField.Name;
-                        sb.AppendLine($"{new string(' ', (level + 2) * 2)}- `{enumField.Name}`: {enumDesc}");
+                        AppendTypeMarkdown(builder, valueType, visited, level + 2);
                     }
                     continue;
                 }
 
-                // 単純型またはカスタム型
-                sb.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`{fieldType.Name}`): {fieldDesc}");
+                if (fieldType.IsArrayOrList(out var elementType))
+                {
+                    builder.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`List<{elementType.Name}>`): {description}");
+                    if (!IsSimple(elementType))
+                    {
+                        AppendTypeMarkdown(builder, elementType, visited, level + 2);
+                    }
+                    continue;
+                }
+
+                if (fieldType.IsEnum)
+                {
+                    builder.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`Enum {fieldType.Name}`): {description}");
+                    var enumFields = fieldType.GetFields(BindingFlags.Public | BindingFlags.Static);
+                    foreach (var enumField in enumFields)
+                    {
+                        var enumDescription = enumField.GetCustomAttribute<DescriptionAttribute>()?.Description ?? enumField.Name;
+                        builder.AppendLine($"{new string(' ', (level + 2) * 2)}- `{enumField.Name}`: {enumDescription}");
+                    }
+                    continue;
+                }
+
+                builder.AppendLine($"{new string(' ', (level + 1) * 2)}- **{field.Name}** (`{fieldType.Name}`): {description}");
 
                 if (!IsSimple(fieldType))
                 {
-                    AppendTypeMarkdown(sb, fieldType, visited, level + 2);
+                    AppendTypeMarkdown(builder, fieldType, visited, level + 2);
                 }
             }
         }

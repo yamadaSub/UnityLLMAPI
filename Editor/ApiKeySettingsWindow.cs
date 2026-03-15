@@ -11,10 +11,12 @@ namespace UnityLLMAPI.Editor
         private const string PrefOpenAI = "UnityLLMAPI.OPENAI_API_KEY";
         private const string PrefGrok   = "UnityLLMAPI.GROK_API_KEY";
         private const string PrefGoogle = "UnityLLMAPI.GOOGLE_API_KEY";
+        private const string PrefAnthropic = "UnityLLMAPI.ANTHROPIC_API_KEY";
 
         private string openAI;
         private string grok;
         private string google;
+        private string anthropic;
         private bool showValues = false;
         private bool ignoreEditorKeys = false;
 
@@ -33,6 +35,7 @@ namespace UnityLLMAPI.Editor
             openAI = LoadKey(PrefOpenAI);
             grok   = LoadKey(PrefGrok);
             google = LoadKey(PrefGoogle);
+            anthropic = LoadKey(PrefAnthropic);
             ignoreEditorKeys = LoadBool(PrefIgnoreEditorKeys, false);
         }
 
@@ -41,6 +44,7 @@ namespace UnityLLMAPI.Editor
             SaveKey(PrefOpenAI, openAI);
             SaveKey(PrefGrok,   grok);
             SaveKey(PrefGoogle, google);
+            SaveKey(PrefAnthropic, anthropic);
             ShowNotification(new GUIContent("Saved project keys."));
         }
 
@@ -49,7 +53,8 @@ namespace UnityLLMAPI.Editor
             SaveKey(PrefOpenAI, null);
             SaveKey(PrefGrok,   null);
             SaveKey(PrefGoogle, null);
-            openAI = grok = google = string.Empty;
+            SaveKey(PrefAnthropic, null);
+            openAI = grok = google = anthropic = string.Empty;
             ShowNotification(new GUIContent("Cleared stored keys."));
         }
 
@@ -147,6 +152,12 @@ namespace UnityLLMAPI.Editor
                 envNames: new[] { "GOOGLE_API_KEY" },
                 refValue: ref google,
                 prefKey: PrefGoogle);
+
+            DrawKeySection(
+                title: "Anthropic (Claude)",
+                envNames: new[] { "ANTHROPIC_API_KEY" },
+                refValue: ref anthropic,
+                prefKey: PrefAnthropic);
 
             GUILayout.FlexibleSpace();
             using (new EditorGUILayout.HorizontalScope())

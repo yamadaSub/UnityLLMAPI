@@ -21,6 +21,7 @@ namespace UnityLLMAPI.Chat
         OpenAI,
         Grok,
         Gemini,
+        Anthropic,
     }
 
     // 各モデルのメタ情報を集約するデータコンテナ
@@ -78,6 +79,20 @@ namespace UnityLLMAPI.Chat
                                    | AICapabilities.JsonSchema
                                    | AICapabilities.FunctionCalling,
                     MaxContextTokens = 128000,
+                }
+            },
+            {
+                AIModelType.GPT5_4,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.GPT5_4,
+                    Provider = AIProvider.OpenAI,
+                    ModelId = "gpt-5.4",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1050000,
                 }
             },
             {
@@ -247,6 +262,34 @@ namespace UnityLLMAPI.Chat
                     ModelId = "gemini-3.1-flash-image-preview",
                     Capabilities = AICapabilities.ImageGeneration | AICapabilities.Vision,
                     MaxContextTokens = 131072,
+                }
+            },
+            {
+                AIModelType.ClaudeSonnet46,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.ClaudeSonnet46,
+                    Provider = AIProvider.Anthropic,
+                    ModelId = "claude-sonnet-4-6",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1000000,
+                }
+            },
+            {
+                AIModelType.ClaudeOpus46,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.ClaudeOpus46,
+                    Provider = AIProvider.Anthropic,
+                    ModelId = "claude-opus-4-6",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1000000,
                 }
             },
         };

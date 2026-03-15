@@ -10,6 +10,7 @@ namespace UnityLLMAPI.Chat
             { AIProvider.OpenAI, new OpenAIClient() },
             { AIProvider.Grok,   new GrokClient() },
             { AIProvider.Gemini, new GeminiClient() },
+            { AIProvider.Anthropic, new AnthropicClient() },
         };
 
         /// <summary>

@@ -18,9 +18,13 @@ namespace UnityLLMAPI.Chat
         [Tooltip("Google API key used for Gemini models.")]
         [SerializeField] private string googleApiKey;
 
+        [Tooltip("Anthropic API key used for Claude models.")]
+        [SerializeField] private string anthropicApiKey;
+
         public string OpenAIApiKey => openAIApiKey;
         public string GrokApiKey => grokApiKey;
         public string GoogleApiKey => googleApiKey;
+        public string AnthropicApiKey => anthropicApiKey;
 
         private void OnEnable()
         {

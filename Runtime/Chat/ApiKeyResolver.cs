@@ -17,6 +17,7 @@ namespace UnityLLMAPI.Chat
         public static string OpenAIApiKey => ResolveApiKey(b => b.OpenAIApiKey, new[] { "OPENAI_API_KEY" });
         public static string GrokApiKey => ResolveApiKey(b => b.GrokApiKey, new[] { "GROK_API_KEY" });
         public static string GoogleApiKey => ResolveApiKey(b => b.GoogleApiKey, new[] { "GOOGLE_API_KEY" });
+        public static string AnthropicApiKey => ResolveApiKey(b => b.AnthropicApiKey, new[] { "ANTHROPIC_API_KEY" });
 
 #if UNITY_EDITOR
         private const string EditorIgnoreKeysConfig = "UnityLLMAPI.IGNORE_EDITOR_KEYS";
@@ -55,6 +56,8 @@ namespace UnityLLMAPI.Chat
                     return "Provide a Grok API key via AIManagerBehaviour, UnityLLMAPI.GROK_API_KEY (EditorUserSettings), or the GROK_API_KEY environment variable.";
                 case AIProvider.Gemini:
                     return "Provide a Google API key via AIManagerBehaviour, UnityLLMAPI.GOOGLE_API_KEY (EditorUserSettings), or the GOOGLE_API_KEY environment variable.";
+                case AIProvider.Anthropic:
+                    return "Provide an Anthropic API key via AIManagerBehaviour, UnityLLMAPI.ANTHROPIC_API_KEY (EditorUserSettings), or the ANTHROPIC_API_KEY environment variable.";
                 default:
                     return "Configure the matching API key on AIManagerBehaviour, in EditorUserSettings (UnityLLMAPI.*), or via environment variables.";
             }
