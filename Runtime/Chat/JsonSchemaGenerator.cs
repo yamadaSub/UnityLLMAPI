@@ -40,16 +40,23 @@ namespace UnityLLMAPI.Schema
         }
 
         public static Dictionary<string, object> BuildObjectSchema(
-            IEnumerable<(string key, Dictionary<string, object> schema)> members)
+            IEnumerable<(string key, Dictionary<string, object> schema)> members,
+            IEnumerable<string> requiredKeys = null)
         {
             var properties = new Dictionary<string, object>();
             var required = new List<string>();
+            var requiredSet = requiredKeys != null
+                ? new HashSet<string>(requiredKeys, StringComparer.Ordinal)
+                : null;
 
             foreach (var (key, schema) in members)
             {
-                if (schema == null) continue;
+                if (string.IsNullOrEmpty(key) || schema == null) continue;
                 properties[key] = schema;
-                required.Add(key);
+                if (requiredSet == null || requiredSet.Contains(key))
+                {
+                    required.Add(key);
+                }
             }
 
             return new Dictionary<string, object>

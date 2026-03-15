@@ -206,7 +206,7 @@ namespace UnityLLMAPI.Chat
 
             foreach (var message in messages)
             {
-                if (message == null) continue;
+                if (message == null || message.role == MessageRole.System) continue;
                 var parts = BuildGeminiParts(message);
                 if (parts.Count == 0)
                 {
@@ -222,6 +222,33 @@ namespace UnityLLMAPI.Chat
             }
 
             return contents;
+        }
+
+        public static Dictionary<string, object> BuildGeminiSystemInstruction(List<Message> messages)
+        {
+            if (messages == null || messages.Count == 0) return null;
+
+            var parts = new List<object>();
+            foreach (var message in messages)
+            {
+                if (message == null || message.role != MessageRole.System) continue;
+
+                foreach (var part in message.EnumerateParts())
+                {
+                    if (part?.type != MessageContentType.Text || string.IsNullOrWhiteSpace(part.text)) continue;
+                    parts.Add(new Dictionary<string, object>
+                    {
+                        { "text", part.text }
+                    });
+                }
+            }
+
+            if (parts.Count == 0) return null;
+
+            return new Dictionary<string, object>
+            {
+                { "parts", parts }
+            };
         }
 
         public static List<object> BuildGeminiParts(Message message)

@@ -65,7 +65,7 @@ namespace UnityLLMAPI.Chat
 
         private static string ExtractGeminiContent(JObject body)
         {
-            return body?["candidates"]?[0]?["content"]?["parts"]?[0]?["text"]?.ToString();
+            return ConcatenateTextParts(body?["candidates"]?[0]?["content"]?["parts"] as JArray);
         }
 
         private static string ExtractAnthropicContent(JObject body)
@@ -210,6 +210,19 @@ namespace UnityLLMAPI.Chat
             }
 
             return null;
+        }
+
+        private static string ConcatenateTextParts(JArray parts)
+        {
+            if (parts == null) return null;
+
+            var texts = parts
+                .OfType<JObject>()
+                .Select(part => part["text"]?.ToString())
+                .Where(text => !string.IsNullOrEmpty(text))
+                .ToList();
+
+            return texts.Count == 0 ? null : string.Concat(texts);
         }
     }
 }

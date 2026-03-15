@@ -37,9 +37,15 @@ namespace UnityLLMAPI.Chat
             }
 
             var endpoint = $"{ApiBase}/{model.ModelId}:generateContent";
-            var contents = MessagePayloadBuilder.BuildGeminiContents(messages?.ToList() ?? new List<Message>());
+            var messageList = messages?.ToList() ?? new List<Message>();
+            var contents = MessagePayloadBuilder.BuildGeminiContents(messageList);
+            if (!HasConversationContents(contents))
+            {
+                return FailureChatResult(model, "Gemini requires at least one non-system message.");
+            }
 
             var body = new Dictionary<string, object> { { "contents", contents } };
+            AddSystemInstruction(body, messageList);
             AddFunctionDeclarations(body, options?.Functions);
             MergeAdditionalBody(body, options?.AdditionalBody);
 
@@ -65,9 +71,15 @@ namespace UnityLLMAPI.Chat
             }
 
             var endpoint = $"{ApiBase}/{model.ModelId}:streamGenerateContent?alt=sse";
-            var contents = MessagePayloadBuilder.BuildGeminiContents(messages?.ToList() ?? new List<Message>());
+            var messageList = messages?.ToList() ?? new List<Message>();
+            var contents = MessagePayloadBuilder.BuildGeminiContents(messageList);
+            if (!HasConversationContents(contents))
+            {
+                return FailureChatStreamResult(model, "Gemini requires at least one non-system message.");
+            }
 
             var body = new Dictionary<string, object> { { "contents", contents } };
+            AddSystemInstruction(body, messageList);
             AddFunctionDeclarations(body, options?.Functions);
             MergeAdditionalBody(body, options?.AdditionalBody);
 
@@ -112,7 +124,12 @@ namespace UnityLLMAPI.Chat
             }
 
             var endpoint = $"{ApiBase}/{model.ModelId}:generateContent";
-            var contents = MessagePayloadBuilder.BuildGeminiContents(messages?.ToList() ?? new List<Message>());
+            var messageList = messages?.ToList() ?? new List<Message>();
+            var contents = MessagePayloadBuilder.BuildGeminiContents(messageList);
+            if (!HasConversationContents(contents))
+            {
+                return FailureChatResult(model, "Gemini requires at least one non-system message.");
+            }
 
             var schemaObj = ParseSchema(jsonSchema);
             var body = new Dictionary<string, object>
@@ -126,6 +143,7 @@ namespace UnityLLMAPI.Chat
                 }
             };
 
+            AddSystemInstruction(body, messageList);
             MergeAdditionalBody(body, options?.AdditionalBody);
 
             var jsonBody = JsonConvert.SerializeObject(body);
@@ -148,9 +166,15 @@ namespace UnityLLMAPI.Chat
             }
 
             var endpoint = $"{ApiBase}/{model.ModelId}:generateContent";
-            var contents = MessagePayloadBuilder.BuildGeminiContents(request?.Messages ?? new List<Message>());
+            var messageList = request?.Messages ?? new List<Message>();
+            var contents = MessagePayloadBuilder.BuildGeminiContents(messageList);
+            if (!HasConversationContents(contents))
+            {
+                return FailureImageResult(model, "Gemini requires at least one non-system message.");
+            }
 
             var body = new Dictionary<string, object> { { "contents", contents } };
+            AddSystemInstruction(body, messageList);
             MergeAdditionalBody(body, request?.AdditionalBody);
             EnsureImageGenerationConfig(body);
 
@@ -301,6 +325,22 @@ namespace UnityLLMAPI.Chat
             {
                 // ignore bad stream chunks
             }
+        }
+
+        private static void AddSystemInstruction(Dictionary<string, object> body, List<Message> messages)
+        {
+            if (body == null) return;
+
+            var systemInstruction = MessagePayloadBuilder.BuildGeminiSystemInstruction(messages);
+            if (systemInstruction != null)
+            {
+                body["system_instruction"] = systemInstruction;
+            }
+        }
+
+        private static bool HasConversationContents(ICollection<Dictionary<string, object>> contents)
+        {
+            return contents != null && contents.Count > 0;
         }
 
         /// <summary>

@@ -127,14 +127,28 @@ namespace UnityLLMAPI.Schema
 
         public virtual Dictionary<string, object> GenerateJsonSchema(Func<T, bool> filter = null)
         {
-            var members = Parameters?
-                .Where(p => !string.IsNullOrEmpty(p.ParameterName) &&
-                            (filter == null || filter(p)))
-                .Select(p => (p.ParameterName, p.ToJsonSchemaPiece()))
-                .ToList() ?? new List<(string, Dictionary<string, object>)>();
+            var members = new List<(string, Dictionary<string, object>)>();
+            var required = new List<string>();
+
+            foreach (var param in Parameters ?? Array.Empty<T>())
+            {
+                if (param == null || string.IsNullOrEmpty(param.ParameterName) || (filter != null && !filter(param)))
+                    continue;
+
+                var schemaPiece = param.ToJsonSchemaPiece();
+                if (schemaPiece == null)
+                    continue;
+
+                members.Add((param.ParameterName, schemaPiece));
+                if (param.Required)
+                {
+                    required.Add(param.ParameterName);
+                }
+            }
+
             return new Dictionary<string, object>{
                 { "name", Name },
-                { "schema", JsonSchemaGenerator.BuildObjectSchema(members)}
+                { "schema", JsonSchemaGenerator.BuildObjectSchema(members, required)}
             };
         }
 
@@ -210,10 +224,25 @@ namespace UnityLLMAPI.Schema
             }
         }
 
+        /// <summary>
+        /// Clone 用の複製先インスタンスを生成します。
+        /// 継承先が独自状態を持つ場合は override して、その状態もコピーした
+        /// インスタンスを返してください。
+        /// </summary>
+        protected virtual RealTimeJsonSchema<T> CreateCloneInstance()
+        {
+            return new RealTimeJsonSchema<T>(Name);
+        }
+
         public virtual object Clone()
         {
-            var json = JsonConvert.SerializeObject(this);
-            return JsonConvert.DeserializeObject<T>(json);
+            var clone = CreateCloneInstance();
+            clone.Parameters = Parameters?
+                .Select(param => param == null
+                    ? null
+                    : JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(param)))
+                .ToArray() ?? Array.Empty<T>();
+            return clone;
         }
     }
 

@@ -30,13 +30,17 @@ namespace UnityLLMAPI.Common
         internal static Task<UnityWebRequest> SendAsync(UnityWebRequest request, CancellationToken cancellationToken, int timeoutSeconds = -1)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return Task.FromCanceled<UnityWebRequest>(cancellationToken);
+            }
 
             if (timeoutSeconds > 0)
             {
                 request.timeout = timeoutSeconds;
             }
 
-            var tcs = new TaskCompletionSource<UnityWebRequest>();
+            var tcs = new TaskCompletionSource<UnityWebRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
             CancellationTokenRegistration ctr = default;
             if (cancellationToken.CanBeCanceled)
             {
@@ -44,26 +48,30 @@ namespace UnityLLMAPI.Common
                 {
                     try { request.Abort(); }
                     catch { /* ignore abort errors */ }
+                    tcs.TrySetCanceled(cancellationToken);
                 });
             }
 
             try
             {
                 var operation = request.SendWebRequest();
-
-                // すでに完了している場合は即座に結果を返す
-                if (operation.isDone)
+                void CompleteRequest()
                 {
                     ctr.Dispose();
-                    tcs.TrySetResult(request);
-                }
-                else
-                {
-                    operation.completed += _ =>
+                    if (cancellationToken.IsCancellationRequested)
                     {
-                        ctr.Dispose();
+                        tcs.TrySetCanceled(cancellationToken);
+                    }
+                    else
+                    {
                         tcs.TrySetResult(request);
-                    };
+                    }
+                }
+
+                operation.completed += _ => CompleteRequest();
+                if (operation.isDone)
+                {
+                    CompleteRequest();
                 }
             }
             catch (Exception ex)

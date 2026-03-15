@@ -210,6 +210,14 @@ public class FunctionSchema<T> : RealTimeJsonSchema<T> where T : SchemaParameter
             }}};
         return schema;
     }
+
+    protected override RealTimeJsonSchema<T> CreateCloneInstance()
+    {
+        return new FunctionSchema<T>(Name)
+        {
+            Description = Description
+        };
+    }
 }
 
 #endregion
@@ -337,6 +345,16 @@ public static class AIManager
         }
         return false;
     }
+
+    private static void LogStructuredParseError(System.Exception ex, string content)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        UnityEngine.Debug.LogError("Structured response parse error: " + ex.Message + "\nResponse: " + content);
+#else
+        var responseLength = string.IsNullOrEmpty(content) ? 0 : content.Length;
+        UnityEngine.Debug.LogError($"Structured response parse error: {ex.Message} (response length: {responseLength})");
+#endif
+    }
     #endregion
 
     /// <summary>
@@ -401,7 +419,7 @@ public static class AIManager
         }
         catch (System.Exception ex)
         {
-            UnityEngine.Debug.LogError("Structured response parse error: " + ex.Message);
+            LogStructuredParseError(ex, content);
             return default;
         }
     }
@@ -422,7 +440,14 @@ public static class AIManager
         var content = await SendStructuredMessageAsyncCore<T>(messages, model, initBody, cancellationToken, timeoutSeconds, targetInstance);
         if (!string.IsNullOrEmpty(content))
         {
-            Newtonsoft.Json.JsonConvert.PopulateObject(content, targetInstance);
+            try
+            {
+                Newtonsoft.Json.JsonConvert.PopulateObject(content, targetInstance);
+            }
+            catch (System.Exception ex)
+            {
+                LogStructuredParseError(ex, content);
+            }
         }
     }
 
@@ -442,7 +467,13 @@ public static class AIManager
         if (valuesDict != null)
         {
             var result = schema.Clone() as UnityLLMAPI.Schema.IJsonSchema;
-            result?.ParseValueDict(valuesDict);
+            if (result == null)
+            {
+                UnityEngine.Debug.LogError($"Failed to clone schema for {schema?.Name ?? "unknown"}.");
+                return null;
+            }
+
+            result.ParseValueDict(valuesDict);
             return result;
         }
         return null;
