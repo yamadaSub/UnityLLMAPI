@@ -2,6 +2,17 @@
 
 このプロジェクトの重要な変更を記録します。
 
+## 1.2.8
+
+### 追加
+- Gemini Embedding 2 のマルチモーダル埋め込み入力を拡張し、`EmbeddingPart.FromAudioClip` / `FromVideoClip` を追加。
+- `MediaAssetEncodingUtility` を追加し、`AudioClip` の WAV 化と Editor ワークフロー向け `VideoClip` の直接バイト入力をサポート。
+
+### 変更
+- `Samples~/Example/EmbeddingSample.cs` を更新し、画像・音声・動画のマルチモーダルクエリを `CorpusWords` に対する近傍検索サンプルとして統一。
+- `EmbeddingSample` のマルチモーダル入力プロパティを `multimodalText` / `multimodalImageTexture` / `multimodalAudioClip` / `multimodalVideoClip` に整理し、ContextMenu 表示も `Run Multimodal Query / ...` で統一。
+- `FromAudioClip` / サンプルの音声クエリについて、`AudioClip.GetData` 制約に合わせて `Load Type = Decompress On Load` 前提を明記。
+
 ## 1.2.7
 
 ### 追加

@@ -253,7 +253,7 @@ var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpus);
 | --- | --- |
 | `Samples~/Example/ExampleUsage.cs` | 通常チャット、構造化レスポンス、RealTime Schema、Function Calling を Inspector の ContextMenu から実行 |
 | `Samples~/Example/VisionSamples.cs` | Gemini 画像生成（編集）と Vision での画像説明のデモ。指示 + Texture2D を渡し、生成画像を保存 |
-| `Samples~/Example/EmbeddingSample.cs` | word2vec 風の近傍探索、Gemini Embedding 2 のマルチモーダル入力例、同一コーパスでのコサイン類似度比較 |
+| `Samples~/Example/EmbeddingSample.cs` | word2vec 風の近傍探索、Gemini Embedding 2 のマルチモーダル入力例、AudioClip を `Decompress On Load` 前提で使う音声クエリと Editor 向け VideoClip クエリ、`CorpusWords` から最も近い語を選ぶ例、同一コーパスでのコサイン類似度比較 |
 | `Samples~/Example/API_REFERENCE.md` | サンプルと主要 API の要点をまとめた簡易リファレンス |
 
 各サンプルは MonoBehaviour をシーンに配置し、インスペクターの ContextMenu から実行できます。Vision サンプルはデフォルトで `Assets` 配下に PNG を保存します（必要に応じて `Application.persistentDataPath` などに変更してください）。
@@ -289,5 +289,9 @@ var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpus);
 ## 11. 補足・注意点 / ライセンス
 - 画像生成フォーマット（PNG / JPEG など）やモダリティが必要な場合は、`initBody` の `generationConfig` に `responseModalities` などを追加し、Gemini 側の要件に合わせてください。
 - 非 readable な Texture を送る際は GPU 読み戻しが走るためコストが増えます。頻繁に使う場合は Texture を readable にするか、`TextureEncodingUtility.TryGetPngBytes` で一度 PNG 化して再利用してください。
+- Gemini Embedding 2 のマルチモーダル入力で画像を扱う場合、Unity では `Texture` / PNG バイト列 / file URI のいずれかで渡せます。`Texture` をそのまま使う場合の主な制約は PNG エンコード可否とメモリ使用量です。
+- 音声は raw bytes / file URI ベースなら特別な Unity 制約はありません。`AudioClip` から直接埋め込む helper は `AudioClip.GetData` に依存するため、クリップの Import Settings で `Load Type = Decompress On Load` が必要です。
+- 動画は runtime では `FromVideoData` または `FromFileUri` を推奨します。`FromVideoClip` は Unity Editor で元ファイルにアクセスできるワークフロー向けで、player build 向けの API ではありません。
+- 画像・音声・動画のいずれも、非常に大きいデータを `inline_data` で毎回送るとメモリとリクエスト負荷が増えます。runtime では `StreamingAssets`、ダウンロード済みファイル、Addressables、独自の file URI 管理など、raw bytes を安定して取得できる経路を用意してください。
 - API キー未設定時は呼び出しで警告 / エラーが出ます。`AIManagerBehaviour`、Unity Editor の `Tools > UnityLLMAPI > Configure API Keys`、環境変数の順に設定を確認してください。
 - ライセンス: MIT License（詳細は `LICENSE` を参照）。

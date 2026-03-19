@@ -19,6 +19,7 @@ Inspector ContextMenu.
 - `EmbeddingSample.cs`
   - word2vec-style nearest-neighbor search
   - Multimodal embeddings with Gemini Embedding 2
+  - AudioClip / VideoClip query examples that pick the nearest word from `CorpusWords`
   - Cosine similarity comparison against the same corpus
 
 ## Setup
@@ -328,8 +329,43 @@ Available embedding part helpers:
 
 - `EmbeddingPart.FromText(string value)`
 - `EmbeddingPart.FromImage(Texture texture, ...)`
+- `EmbeddingPart.FromAudioData(byte[] bytes, string mime = "audio/mpeg")`
+- `EmbeddingPart.FromAudioFileUri(string value, string mime = null)`
+- `EmbeddingPart.FromAudioClip(AudioClip clip, ...)`
+- `EmbeddingPart.FromVideoData(byte[] bytes, string mime = "video/mp4")`
+- `EmbeddingPart.FromVideoFileUri(string value, string mime = null)`
+- `EmbeddingPart.FromVideoClip(VideoClip clip, ...)`
 - `EmbeddingPart.FromFileUri(string value, string mime = null)`
 - `EmbeddingPart.FromInlineData(byte[] bytes, string mime = "application/octet-stream")`
+
+Direct Unity assets can also be used:
+
+```csharp
+using UnityLLMAPI.Embedding;
+using UnityEngine;
+using UnityEngine.Video;
+
+var audioEmbedding = await EmbeddingManager.CreateEmbeddingAsync(
+    EmbeddingInput.FromParts(
+        EmbeddingPart.FromAudioClip(audioClip)),
+    EmbeddingModelType.GeminiEmbedding2);
+```
+
+`AudioClip` is encoded to WAV before upload and requires the clip importer Load Type to be `Decompress On Load`.
+`VideoClip` direct embedding depends on access to the source file and is intended for Editor workflows. Use `FromVideoData` or `FromFileUri` in player builds.
+`EmbeddingSample.cs` also exposes `multimodalText`, which is included together with the image, audio, or video part when those queries run. Leave it empty if you want to validate media-only retrieval.
+The sample builds embeddings for `CorpusWords`, embeds the assigned input, and logs the nearest match from that corpus.
+
+In `EmbeddingSample.cs`, assign `multimodalText`, `multimodalImageTexture`, `multimodalAudioClip`, or `multimodalVideoClip`,
+then run `Run Multimodal Query / Image`, `Run Multimodal Query / Audio`, or
+`Run Multimodal Query / Video` from the Inspector ContextMenu.
+
+### Resource Handling Notes
+
+- Images: `FromImage(Texture)` is convenient in Unity. For repeated requests, pre-encode to PNG bytes or keep your own cached bytes if you want to avoid repeated GPU readback / PNG encoding cost.
+- Audio: if you already have file bytes, prefer `FromAudioData(...)` or `FromFileUri(...)`. `FromAudioClip(...)` is a Unity convenience helper and only works when sample data is readable via `AudioClip.GetData`, which typically means `Load Type = Decompress On Load`.
+- Video: for packaged/runtime content, prefer `FromVideoData(...)` or `FromFileUri(...)`. `FromVideoClip(...)` is mainly for Editor workflows where Unity still has access to the imported source file.
+- Large media: this sample uses inline data for simplicity, but production code should avoid repeatedly embedding very large assets from scene references. Keep a stable raw-byte source such as `StreamingAssets`, downloaded files, Addressables payloads, or your own asset pipeline.
 
 ## Main Types
 

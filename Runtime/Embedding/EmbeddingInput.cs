@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Video;
 using UnityLLMAPI.Common;
 
 namespace UnityLLMAPI.Embedding
@@ -42,6 +43,47 @@ namespace UnityLLMAPI.Embedding
                 data = bytes,
                 mimeType = string.IsNullOrEmpty(mime) ? "application/octet-stream" : mime
             };
+
+        public static EmbeddingPart FromAudioData(byte[] bytes, string mime = "audio/mpeg")
+            => FromInlineData(bytes, string.IsNullOrEmpty(mime) ? "audio/mpeg" : mime);
+
+        public static EmbeddingPart FromAudioFileUri(string value, string mime = null)
+            => FromFileUri(value, mime);
+
+        /// <summary>
+        /// Encodes an AudioClip as WAV for Gemini multimodal embedding.
+        /// Unity sample access requires the clip importer Load Type to be Decompress On Load.
+        /// </summary>
+        public static EmbeddingPart FromAudioClip(AudioClip clip, bool logWarnings = true)
+        {
+            if (!MediaAssetEncodingUtility.TryGetWavBytes(clip, out var wavBytes, logWarnings))
+            {
+                return null;
+            }
+
+            return FromAudioData(wavBytes, "audio/wav");
+        }
+
+        public static EmbeddingPart FromVideoData(byte[] bytes, string mime = "video/mp4")
+            => FromInlineData(bytes, string.IsNullOrEmpty(mime) ? "video/mp4" : mime);
+
+        public static EmbeddingPart FromVideoFileUri(string value, string mime = null)
+            => FromFileUri(value, mime);
+
+        /// <summary>
+        /// Reads the imported video asset bytes for Gemini multimodal embedding.
+        /// This helper is intended for Unity Editor workflows and returns null in player builds.
+        /// Use FromVideoData or FromFileUri for runtime-safe paths.
+        /// </summary>
+        public static EmbeddingPart FromVideoClip(VideoClip clip, string mime = null, bool logWarnings = true)
+        {
+            if (!MediaAssetEncodingUtility.TryGetVideoBytes(clip, out var videoBytes, out var resolvedMimeType, logWarnings))
+            {
+                return null;
+            }
+
+            return FromVideoData(videoBytes, string.IsNullOrWhiteSpace(mime) ? resolvedMimeType : mime);
+        }
 
         public static EmbeddingPart FromImage(Texture texture, string mime = "image/png", bool allowGpuReadback = true, bool logWarnings = true)
         {
