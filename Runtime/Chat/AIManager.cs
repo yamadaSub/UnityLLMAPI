@@ -24,11 +24,14 @@ public enum AIModelType
     GPT5 = 1,
     GPT5_2 = 13,
     GPT5_4 = 19,
+    GPT5_5 = 20,
     GPT5Mini = 2,
     Grok2 = 4,
     Grok3 = 5,
     Grok4_1 = 14,
     Grok4_1Reasoning = 15,
+    Grok4_2 = 21,
+    Grok4_3 = 22,
     Gemini25 = 6,
     Gemini25Pro = 7,
     Gemini25Flash = 8,
@@ -286,7 +289,12 @@ public static class AIManager
         }
         if (!raw.IsSuccess)
         {
-            UnityEngine.Debug.LogError($"Provider call failed for {spec.ModelId}: {raw.ErrorMessage ?? "unknown error"}");
+            UnityEngine.Debug.LogError(BuildProviderErrorMessage(
+                $"Provider call failed for {spec.ModelId}",
+                raw.ErrorMessage,
+                raw.StatusCode,
+                raw.RawJson,
+                raw.ResponseHeaders));
             return true;
         }
         return false;
@@ -304,7 +312,12 @@ public static class AIManager
         }
         if (!raw.IsSuccess)
         {
-            UnityEngine.Debug.LogError($"Provider streaming call failed for {spec.ModelId}: {raw.ErrorMessage ?? "unknown error"}");
+            UnityEngine.Debug.LogError(BuildProviderErrorMessage(
+                $"Provider streaming call failed for {spec.ModelId}",
+                raw.ErrorMessage,
+                raw.StatusCode,
+                raw.RawText,
+                raw.ResponseHeaders));
             return true;
         }
         return false;
@@ -322,7 +335,12 @@ public static class AIManager
         }
         if (!raw.IsSuccess)
         {
-            UnityEngine.Debug.LogError($"Image generation failed for {spec.ModelId}: {raw.ErrorMessage ?? "unknown error"}");
+            UnityEngine.Debug.LogError(BuildProviderErrorMessage(
+                $"Image generation failed for {spec.ModelId}",
+                raw.ErrorMessage,
+                raw.StatusCode,
+                raw.RawJson,
+                raw.ResponseHeaders));
             return true;
         }
         return false;
@@ -340,10 +358,98 @@ public static class AIManager
         }
         if (!raw.IsSuccess)
         {
-            UnityEngine.Debug.LogError($"Embedding request failed for {spec.ModelId}: {raw.ErrorMessage ?? "unknown error"}");
+            UnityEngine.Debug.LogError(BuildProviderErrorMessage(
+                $"Embedding request failed for {spec.ModelId}",
+                raw.ErrorMessage,
+                raw.StatusCode,
+                raw.RawJson,
+                raw.ResponseHeaders));
             return true;
         }
         return false;
+    }
+
+    private static string BuildProviderErrorMessage(
+        string prefix,
+        string errorMessage,
+        long statusCode,
+        string responseBody,
+        Dictionary<string, string> responseHeaders)
+    {
+        var details = new List<string>
+        {
+            $"{prefix}: {errorMessage ?? "unknown error"}"
+        };
+
+        if (statusCode > 0)
+        {
+            details.Add($"status={statusCode}");
+        }
+
+        var rateLimitHeaders = BuildRateLimitHeaderSummary(responseHeaders);
+        if (!string.IsNullOrEmpty(rateLimitHeaders))
+        {
+            details.Add(rateLimitHeaders);
+        }
+
+        if (!string.IsNullOrWhiteSpace(responseBody))
+        {
+            details.Add("body=" + TruncateForLog(responseBody.Trim(), 2000));
+        }
+
+        return string.Join("\n", details);
+    }
+
+    private static string BuildRateLimitHeaderSummary(Dictionary<string, string> headers)
+    {
+        if (headers == null || headers.Count == 0) return null;
+
+        var names = new[]
+        {
+            "x-request-id",
+            "x-ratelimit-limit-requests",
+            "x-ratelimit-remaining-requests",
+            "x-ratelimit-reset-requests",
+            "x-ratelimit-limit-tokens",
+            "x-ratelimit-remaining-tokens",
+            "x-ratelimit-reset-tokens",
+            "retry-after"
+        };
+
+        var values = new List<string>();
+        foreach (var name in names)
+        {
+            if (TryGetHeader(headers, name, out var value) && !string.IsNullOrEmpty(value))
+            {
+                values.Add($"{name}={value}");
+            }
+        }
+
+        return values.Count == 0 ? null : "headers: " + string.Join(", ", values);
+    }
+
+    private static bool TryGetHeader(Dictionary<string, string> headers, string name, out string value)
+    {
+        value = null;
+        if (headers == null || string.IsNullOrEmpty(name)) return false;
+        if (headers.TryGetValue(name, out value)) return true;
+
+        foreach (var kv in headers)
+        {
+            if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = kv.Value;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string TruncateForLog(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength) return value;
+        return value.Substring(0, maxLength) + "...";
     }
 
     private static void LogStructuredParseError(System.Exception ex, string content)

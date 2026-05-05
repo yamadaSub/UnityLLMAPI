@@ -96,6 +96,20 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
+                AIModelType.GPT5_5,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.GPT5_5,
+                    Provider = AIProvider.OpenAI,
+                    ModelId = "gpt-5.5",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1050000,
+                }
+            },
+            {
                 AIModelType.GPT5Mini,
                 new ModelSpec
                 {
@@ -159,6 +173,33 @@ namespace UnityLLMAPI.Chat
                                    | AICapabilities.JsonSchema
                                    | AICapabilities.FunctionCalling,
                     MaxContextTokens = 2000000,
+                }
+            },
+            {
+                AIModelType.Grok4_2,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Grok4_2,
+                    Provider = AIProvider.Grok,
+                    ModelId = "grok-4.20-reasoning",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 2000000,
+                }
+            },
+            {
+                AIModelType.Grok4_3,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Grok4_3,
+                    Provider = AIProvider.Grok,
+                    ModelId = "grok-4.3",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1000000,
                 }
             },
             {

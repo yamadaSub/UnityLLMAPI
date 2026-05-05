@@ -97,6 +97,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = req.result == UnityWebRequest.Result.Success,
                 StatusCode = req.responseCode,
                 ErrorMessage = req.result == UnityWebRequest.Result.Success ? null : req.error,
+                ResponseHeaders = req.GetResponseHeaders(),
                 RawText = rawText,
                 Content = content.ToString()
             };
@@ -289,6 +290,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = req.result == UnityWebRequest.Result.Success,
                 StatusCode = req.responseCode,
                 ErrorMessage = req.result == UnityWebRequest.Result.Success ? null : req.error,
+                ResponseHeaders = req.GetResponseHeaders(),
                 RawJson = rawJson,
                 Body = TryParse(rawJson)
             };
@@ -306,6 +308,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = false,
                 StatusCode = 0,
                 ErrorMessage = message,
+                ResponseHeaders = new Dictionary<string, string>(),
                 RawJson = string.Empty,
                 Body = null
             };
@@ -320,6 +323,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = false,
                 StatusCode = 0,
                 ErrorMessage = message,
+                ResponseHeaders = new Dictionary<string, string>(),
                 RawText = string.Empty,
                 Content = string.Empty
             };

@@ -63,7 +63,10 @@ Useful chat-oriented models:
 - `AIModelType.GPT4o`
 - `AIModelType.GPT5`
 - `AIModelType.GPT5_4`
+- `AIModelType.GPT5_5`
 - `AIModelType.Grok4_1`
+- `AIModelType.Grok4_2`
+- `AIModelType.Grok4_3`
 
 ## Streaming Chat
 

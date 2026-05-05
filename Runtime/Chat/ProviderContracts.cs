@@ -33,6 +33,7 @@ namespace UnityLLMAPI.Chat
         public bool IsSuccess { get; set; }
         public long StatusCode { get; set; }
         public string ErrorMessage { get; set; }
+        public Dictionary<string, string> ResponseHeaders { get; set; }
         public string RawJson { get; set; }
         public JObject Body { get; set; }
     }
@@ -45,6 +46,7 @@ namespace UnityLLMAPI.Chat
         public bool IsSuccess { get; set; }
         public long StatusCode { get; set; }
         public string ErrorMessage { get; set; }
+        public Dictionary<string, string> ResponseHeaders { get; set; }
 
         /// <summary>
         /// ストリームとして受信した生テキスト（SSE 等）の全量
@@ -65,6 +67,7 @@ namespace UnityLLMAPI.Chat
         public bool IsSuccess { get; set; }
         public long StatusCode { get; set; }
         public string ErrorMessage { get; set; }
+        public Dictionary<string, string> ResponseHeaders { get; set; }
         public string RawJson { get; set; }
         public List<GeneratedImage> Images { get; set; } = new List<GeneratedImage>();
         public string PromptFeedback { get; set; }
@@ -78,6 +81,7 @@ namespace UnityLLMAPI.Chat
         public bool IsSuccess { get; set; }
         public long StatusCode { get; set; }
         public string ErrorMessage { get; set; }
+        public Dictionary<string, string> ResponseHeaders { get; set; }
         public string RawJson { get; set; }
         public List<SerializableEmbedding> Embeddings { get; set; } = new List<SerializableEmbedding>();
     }

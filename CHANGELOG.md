@@ -2,6 +2,13 @@
 
 このプロジェクトの重要な変更を記録します。
 
+## 1.2.9
+
+### 追加
+- `AIModelType.GPT5_5` / `gpt-5.5` を追加。
+- `AIModelType.Grok4_2` / `grok-4.20-reasoning` を追加。
+- `AIModelType.Grok4_3` / `grok-4.3` を追加。
+
 ## 1.2.8
 
 ### 追加

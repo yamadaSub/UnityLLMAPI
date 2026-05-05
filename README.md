@@ -6,8 +6,8 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 ## 1. 概要
 - Unity スクリプトから LLM (テキスト / ビジョン) と Embedding を安全に叩くための補助パッケージです。
 - 対応プロバイダと主なモデル (`AIModelType`):
-  - OpenAI: `GPT4o`, `GPT5`, `GPT5_2`, `GPT5_4`, `GPT5Mini`
-  - Grok (x.ai): `Grok2`, `Grok3`, `Grok4_1`, `Grok4_1Reasoning`
+  - OpenAI: `GPT4o`, `GPT5`, `GPT5_2`, `GPT5_4`, `GPT5_5`, `GPT5Mini`
+  - Grok (x.ai): `Grok2`, `Grok3`, `Grok4_1`, `Grok4_1Reasoning`, `Grok4_2`, `Grok4_3`
   - Anthropic: `ClaudeSonnet46`, `ClaudeOpus46`
   - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImage`（旧 `Gemini25FlashImagePreview`）、`Gemini31`, `Gemini3ProImage`, `Gemini31FlashImage`（Vision / 画像生成に対応）
 - Embedding は OpenAI (text-embedding-3-small / -large)、Gemini Embedding 001 系、Gemini Embedding 2（マルチモーダル入力対応）をサポートします。
