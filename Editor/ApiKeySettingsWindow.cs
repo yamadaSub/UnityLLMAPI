@@ -3,6 +3,7 @@
 using UnityEditor;
 using UnityEngine;
 using System;
+using UnityLLMAPI.Chat;
 
 namespace UnityLLMAPI.Editor
 {
@@ -12,11 +13,15 @@ namespace UnityLLMAPI.Editor
         private const string PrefGrok   = "UnityLLMAPI.GROK_API_KEY";
         private const string PrefGoogle = "UnityLLMAPI.GOOGLE_API_KEY";
         private const string PrefAnthropic = "UnityLLMAPI.ANTHROPIC_API_KEY";
+        private const string PrefOpenAIEndpointMode = "UnityLLMAPI.OPENAI_ENDPOINT_MODE";
+        private const string PrefCodexAppServerBaseUrl = "UnityLLMAPI.CODEX_APP_SERVER_BASE_URL";
 
         private string openAI;
         private string grok;
         private string google;
         private string anthropic;
+        private OpenAIEndpointMode openAIEndpointMode = OpenAIEndpointMode.OpenAI;
+        private string codexAppServerBaseUrl;
         private bool showValues = false;
         private bool ignoreEditorKeys = false;
 
@@ -26,7 +31,7 @@ namespace UnityLLMAPI.Editor
         public static void Open()
         {
             var win = GetWindow<ApiKeySettingsWindow>(true, "Unity LLM API Keys", true);
-            win.minSize = new Vector2(520, 360);
+            win.minSize = new Vector2(560, 460);
             win.Show();
         }
 
@@ -36,6 +41,8 @@ namespace UnityLLMAPI.Editor
             grok   = LoadKey(PrefGrok);
             google = LoadKey(PrefGoogle);
             anthropic = LoadKey(PrefAnthropic);
+            openAIEndpointMode = LoadOpenAIEndpointMode(PrefOpenAIEndpointMode, OpenAIEndpointMode.OpenAI);
+            codexAppServerBaseUrl = LoadKey(PrefCodexAppServerBaseUrl);
             ignoreEditorKeys = LoadBool(PrefIgnoreEditorKeys, false);
         }
 
@@ -45,6 +52,8 @@ namespace UnityLLMAPI.Editor
             SaveKey(PrefGrok,   grok);
             SaveKey(PrefGoogle, google);
             SaveKey(PrefAnthropic, anthropic);
+            SaveKey(PrefOpenAIEndpointMode, openAIEndpointMode.ToString());
+            SaveKey(PrefCodexAppServerBaseUrl, codexAppServerBaseUrl);
             ShowNotification(new GUIContent("Saved project keys."));
         }
 
@@ -54,7 +63,11 @@ namespace UnityLLMAPI.Editor
             SaveKey(PrefGrok,   null);
             SaveKey(PrefGoogle, null);
             SaveKey(PrefAnthropic, null);
+            SaveKey(PrefOpenAIEndpointMode, null);
+            SaveKey(PrefCodexAppServerBaseUrl, null);
             openAI = grok = google = anthropic = string.Empty;
+            openAIEndpointMode = OpenAIEndpointMode.OpenAI;
+            codexAppServerBaseUrl = string.Empty;
             ShowNotification(new GUIContent("Cleared stored keys."));
         }
 
@@ -62,6 +75,13 @@ namespace UnityLLMAPI.Editor
         {
             var value = EditorUserSettings.GetConfigValue(key);
             return string.IsNullOrEmpty(value) ? string.Empty : value;
+        }
+
+        private static OpenAIEndpointMode LoadOpenAIEndpointMode(string key, OpenAIEndpointMode defaultValue)
+        {
+            var stored = EditorUserSettings.GetConfigValue(key);
+            if (string.IsNullOrEmpty(stored)) return defaultValue;
+            return Enum.TryParse(stored, true, out OpenAIEndpointMode mode) ? mode : defaultValue;
         }
 
         private static void SaveKey(string key, string value)
@@ -109,10 +129,19 @@ namespace UnityLLMAPI.Editor
             return new string('*', Math.Max(0, v.Length - visible)) + v.Substring(v.Length - visible, visible);
         }
 
+        private static void DrawEnvStatus(string key, bool mask)
+        {
+            var envVal = ReadEnv(key);
+            var display = string.IsNullOrEmpty(envVal)
+                ? "(not set)"
+                : mask ? Mask(envVal) : envVal;
+            EditorGUILayout.LabelField($"Env {key}", display);
+        }
+
         private void OnGUI()
         {
             EditorGUILayout.HelpBox(
-                "Keys are NOT saved in assets. Runtime resolves in order: Environment Variables -> EditorUserSettings (per project).",
+                "Keys and local endpoint settings are NOT saved in assets. Endpoint settings resolve in order: AIManager override -> AIManagerBehaviour -> EditorUserSettings -> Environment Variables.",
                 MessageType.Info);
 
             using (new EditorGUILayout.HorizontalScope())
@@ -141,6 +170,8 @@ namespace UnityLLMAPI.Editor
                 refValue: ref openAI,
                 prefKey: PrefOpenAI);
 
+            DrawOpenAIEndpointSection();
+
             DrawKeySection(
                 title: "Grok (x.ai)",
                 envNames: new[] { "GROK_API_KEY" },
@@ -167,6 +198,38 @@ namespace UnityLLMAPI.Editor
             }
         }
 
+        private void DrawOpenAIEndpointSection()
+        {
+            EditorGUILayout.Space(8);
+            EditorGUILayout.LabelField("OpenAI Endpoint Mode", EditorStyles.boldLabel);
+
+            using (new EditorGUILayout.VerticalScope("box"))
+            {
+                DrawEnvStatus("CODEX_APP_SERVER_BASE_URL", mask: false);
+                DrawEnvStatus("CODEX_APP_SERVER_URL", mask: false);
+                DrawEnvStatus("OPENAI_ENDPOINT_MODE", mask: false);
+                DrawEnvStatus("UNITYLLMAPI_OPENAI_ENDPOINT_MODE", mask: false);
+            }
+
+            using (new EditorGUI.DisabledScope(ignoreEditorKeys))
+            {
+                openAIEndpointMode = (OpenAIEndpointMode)EditorGUILayout.EnumPopup(
+                    $"Project Mode ({PrefOpenAIEndpointMode})",
+                    openAIEndpointMode);
+
+                codexAppServerBaseUrl = EditorGUILayout.TextField(
+                    $"Codex App Server URL ({PrefCodexAppServerBaseUrl})",
+                    codexAppServerBaseUrl);
+            }
+
+            if (openAIEndpointMode == OpenAIEndpointMode.CodexAppServer)
+            {
+                EditorGUILayout.HelpBox(
+                    "Codex App Server mode expects a WebSocket JSON-RPC endpoint, for example ws://127.0.0.1:4500. http:// and https:// values are converted to ws:// and wss:// at runtime. Enable this mode only when routing existing OpenAI/GPT models to App Server; AIModelType.GPT5_5AppServer only needs the URL.",
+                    MessageType.Info);
+            }
+        }
+
         private void DrawKeySection(string title, string[] envNames, ref string refValue, string prefKey)
         {
             EditorGUILayout.Space(8);
@@ -177,8 +240,7 @@ namespace UnityLLMAPI.Editor
             {
                 foreach (var env in envNames)
                 {
-                    var envVal = ReadEnv(env);
-                    EditorGUILayout.LabelField($"Env {env}", string.IsNullOrEmpty(envVal) ? "(not set)" : Mask(envVal));
+                    DrawEnvStatus(env, mask: true);
                 }
             }
 

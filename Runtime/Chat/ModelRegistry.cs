@@ -19,6 +19,7 @@ namespace UnityLLMAPI.Chat
     public enum AIProvider
     {
         OpenAI,
+        CodexAppServer,
         Grok,
         Gemini,
         Anthropic,
@@ -106,6 +107,21 @@ namespace UnityLLMAPI.Chat
                                    | AICapabilities.Vision
                                    | AICapabilities.JsonSchema
                                    | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1050000,
+                }
+            },
+            {
+                AIModelType.GPT5_5AppServer,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.GPT5_5AppServer,
+                    Provider = AIProvider.CodexAppServer,
+                    ModelId = "gpt-5.5",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling
+                                   | AICapabilities.ImageGeneration,
                     MaxContextTokens = 1050000,
                 }
             },

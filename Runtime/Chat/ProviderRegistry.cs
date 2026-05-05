@@ -8,6 +8,7 @@ namespace UnityLLMAPI.Chat
         private static readonly Dictionary<AIProvider, IProviderClient> Providers = new Dictionary<AIProvider, IProviderClient>
         {
             { AIProvider.OpenAI, new OpenAIClient() },
+            { AIProvider.CodexAppServer, new CodexAppServerClient() },
             { AIProvider.Grok,   new GrokClient() },
             { AIProvider.Gemini, new GeminiClient() },
             { AIProvider.Anthropic, new AnthropicClient() },

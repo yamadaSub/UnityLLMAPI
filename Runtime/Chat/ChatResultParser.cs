@@ -14,6 +14,7 @@ namespace UnityLLMAPI.Chat
             return raw.Provider switch
             {
                 AIProvider.OpenAI => ExtractOpenAiContent(raw.Body),
+                AIProvider.CodexAppServer => ExtractOpenAiContent(raw.Body),
                 AIProvider.Grok => ExtractOpenAiContent(raw.Body),
                 AIProvider.Gemini => ExtractGeminiContent(raw.Body),
                 AIProvider.Anthropic => ExtractAnthropicContent(raw.Body),
@@ -51,6 +52,7 @@ namespace UnityLLMAPI.Chat
             return raw.Provider switch
             {
                 AIProvider.OpenAI => ExtractOpenAiFunction(raw.Body, functions),
+                AIProvider.CodexAppServer => ExtractOpenAiFunction(raw.Body, functions),
                 AIProvider.Grok => ExtractOpenAiFunction(raw.Body, functions),
                 AIProvider.Gemini => ExtractGeminiFunction(raw.Body, functions),
                 AIProvider.Anthropic => ExtractAnthropicFunction(raw.Body, functions),

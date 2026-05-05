@@ -25,6 +25,7 @@ public enum AIModelType
     GPT5_2 = 13,
     GPT5_4 = 19,
     GPT5_5 = 20,
+    GPT5_5AppServer = 23,
     GPT5Mini = 2,
     Grok2 = 4,
     Grok3 = 5,
@@ -238,6 +239,8 @@ public static class AIManager
     public static string GrokApiKey => ApiKeyResolver.GrokApiKey;
     public static string GoogleApiKey => ApiKeyResolver.GoogleApiKey;
     public static string AnthropicApiKey => ApiKeyResolver.AnthropicApiKey;
+    public static OpenAIEndpointMode OpenAIEndpointMode => ApiKeyResolver.OpenAIEndpointMode;
+    public static string CodexAppServerBaseUrl => ApiKeyResolver.CodexAppServerBaseUrl;
 
     internal static void RegisterBehaviour(AIManagerBehaviour behaviour) => ApiKeyResolver.RegisterBehaviour(behaviour);
     internal static void UnregisterBehaviour(AIManagerBehaviour behaviour) => ApiKeyResolver.UnregisterBehaviour(behaviour);
@@ -246,6 +249,16 @@ public static class AIManager
     /// モデル種別に対応するメタ情報を取得するラッパー。
     /// </summary>
     public static ModelSpec GetModelSpec(AIModelType modelType) => ModelRegistry.Get(modelType);
+    public static ModelSpec GetResolvedModelSpec(AIModelType modelType) => ResolveModelSpec(modelType);
+
+    public static void UseOpenAIEndpoint()
+        => ApiKeyResolver.ConfigureOpenAIEndpoint(OpenAIEndpointMode.OpenAI);
+
+    public static void UseCodexAppServer(string serverUrl = null)
+        => ApiKeyResolver.ConfigureOpenAIEndpoint(OpenAIEndpointMode.CodexAppServer, serverUrl);
+
+    public static void ClearOpenAIEndpointOverride()
+        => ApiKeyResolver.ClearOpenAIEndpointOverride();
 
     #region Helpers
     /// <summary>
@@ -262,6 +275,28 @@ public static class AIManager
             AdditionalBody = initBody ?? new Dictionary<string, object>(),
             Functions = functions,
             TimeoutSeconds = timeoutSeconds
+        };
+    }
+
+    private static ModelSpec ResolveModelSpec(AIModelType modelType)
+    {
+        var spec = ModelRegistry.Get(modelType);
+        if (spec.Provider != AIProvider.OpenAI
+            || ApiKeyResolver.OpenAIEndpointMode != OpenAIEndpointMode.CodexAppServer)
+        {
+            return spec;
+        }
+
+        var capabilities = spec.Capabilities
+                           & ~AICapabilities.Embedding;
+
+        return new ModelSpec
+        {
+            ModelType = spec.ModelType,
+            Provider = AIProvider.CodexAppServer,
+            ModelId = spec.ModelId,
+            Capabilities = capabilities,
+            MaxContextTokens = spec.MaxContextTokens
         };
     }
 
@@ -284,13 +319,17 @@ public static class AIManager
     {
         if (raw == null)
         {
-            UnityEngine.Debug.LogError($"No response received from provider for {spec.ModelType}.");
+            UnityEngine.Debug.LogError(spec.Provider == AIProvider.CodexAppServer
+                ? $"Codex App Server から応答が返りませんでした ({spec.ModelType})。"
+                : $"No response received from provider for {spec.ModelType}.");
             return true;
         }
         if (!raw.IsSuccess)
         {
             UnityEngine.Debug.LogError(BuildProviderErrorMessage(
-                $"Provider call failed for {spec.ModelId}",
+                spec.Provider == AIProvider.CodexAppServer
+                    ? $"Codex App Server 呼び出しに失敗しました ({spec.ModelId})"
+                    : $"Provider call failed for {spec.ModelId}",
                 raw.ErrorMessage,
                 raw.StatusCode,
                 raw.RawJson,
@@ -307,13 +346,17 @@ public static class AIManager
     {
         if (raw == null)
         {
-            UnityEngine.Debug.LogError($"No stream response received from provider for {spec.ModelType}.");
+            UnityEngine.Debug.LogError(spec.Provider == AIProvider.CodexAppServer
+                ? $"Codex App Server からストリーミング応答が返りませんでした ({spec.ModelType})。"
+                : $"No stream response received from provider for {spec.ModelType}.");
             return true;
         }
         if (!raw.IsSuccess)
         {
             UnityEngine.Debug.LogError(BuildProviderErrorMessage(
-                $"Provider streaming call failed for {spec.ModelId}",
+                spec.Provider == AIProvider.CodexAppServer
+                    ? $"Codex App Server ストリーミング呼び出しに失敗しました ({spec.ModelId})"
+                    : $"Provider streaming call failed for {spec.ModelId}",
                 raw.ErrorMessage,
                 raw.StatusCode,
                 raw.RawText,
@@ -330,13 +373,17 @@ public static class AIManager
     {
         if (raw == null)
         {
-            UnityEngine.Debug.LogError($"No image response received from provider for {spec.ModelType}.");
+            UnityEngine.Debug.LogError(spec.Provider == AIProvider.CodexAppServer
+                ? $"Codex App Server から画像生成応答が返りませんでした ({spec.ModelType})。"
+                : $"No image response received from provider for {spec.ModelType}.");
             return true;
         }
         if (!raw.IsSuccess)
         {
             UnityEngine.Debug.LogError(BuildProviderErrorMessage(
-                $"Image generation failed for {spec.ModelId}",
+                spec.Provider == AIProvider.CodexAppServer
+                    ? $"Codex App Server 画像生成に失敗しました ({spec.ModelId})"
+                    : $"Image generation failed for {spec.ModelId}",
                 raw.ErrorMessage,
                 raw.StatusCode,
                 raw.RawJson,
@@ -473,7 +520,7 @@ public static class AIManager
         System.Threading.CancellationToken cancellationToken = default,
         int timeoutSeconds = -1)
     {
-        var spec = ModelRegistry.Get(model);
+        var spec = ResolveModelSpec(model);
         EnsureCapability(spec, AICapabilities.TextChat);
 
         // ModelSpec -> ProviderClient にルーティングして実行
@@ -493,7 +540,7 @@ public static class AIManager
         int timeoutSeconds = -1,
         System.Action<string> onContentDelta = null)
     {
-        var spec = ModelRegistry.Get(model);
+        var spec = ResolveModelSpec(model);
         EnsureCapability(spec, AICapabilities.TextChat);
 
         var provider = ProviderRegistry.Get(spec.Provider);
@@ -596,7 +643,7 @@ public static class AIManager
         System.Threading.CancellationToken cancellationToken = default,
         int timeoutSeconds = -1)
     {
-        var spec = ModelRegistry.Get(model);
+        var spec = ResolveModelSpec(model);
         EnsureCapability(spec, AICapabilities.JsonSchema);
 
         // 構造化出力に対応した ProviderClient に委譲
@@ -623,7 +670,7 @@ public static class AIManager
             throw new ArgumentException("functions is null or empty.", nameof(functions));
         }
 
-        var spec = ModelRegistry.Get(model);
+        var spec = ResolveModelSpec(model);
         EnsureCapability(spec, AICapabilities.FunctionCalling);
 
         // Function Calling は追加オプションとして functions を渡す
@@ -645,7 +692,7 @@ public static class AIManager
         System.Threading.CancellationToken cancellationToken = default,
         int timeoutSeconds = -1)
     {
-        var spec = ModelRegistry.Get(model);
+        var spec = ResolveModelSpec(model);
         EnsureCapability(spec, AICapabilities.ImageGeneration);
 
         var provider = ProviderRegistry.Get(spec.Provider);
@@ -693,7 +740,7 @@ public static class AIManager
         int timeoutSeconds,
         object schemaSource)
     {
-        var spec = ModelRegistry.Get(model);
+        var spec = ResolveModelSpec(model);
         EnsureCapability(spec, AICapabilities.JsonSchema);
 
         var schema = UnityLLMAPI.Schema.JsonSchemaGenerator.GenerateSchema<T>(schemaSource: schemaSource);

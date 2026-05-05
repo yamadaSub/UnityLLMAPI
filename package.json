@@ -1,9 +1,9 @@
 {
   "name": "com.yamadasub.llmapi",
   "displayName": "LLMAPI",
-  "version": "1.2.9",
+  "version": "1.3.0",
   "unity": "6000.0",
-  "description": "LLMをひとまず使うための自作ライブラリ",
+  "description": "UnityからLLM、画像生成、Embedding、Codex App Serverを共通APIで扱うためのライブラリ",
   "author": {
     "name": "yamada",
     "email": "yamada.akira2367@gmail.com",
@@ -15,8 +15,13 @@
   "samples": [
     {
       "displayName": "Example Usage",
-      "description": "サンプルのテストコード.",
+      "description": "実行可能なサンプル MonoBehaviour スクリプト.",
       "path": "Samples~/Example"
+    },
+    {
+      "displayName": "API Reference",
+      "description": "主要 API の簡易リファレンス.",
+      "path": "Samples~/APIReference"
     }
   ]
 }

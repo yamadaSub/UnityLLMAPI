@@ -6,7 +6,7 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 ## 1. 概要
 - Unity スクリプトから LLM (テキスト / ビジョン) と Embedding を安全に叩くための補助パッケージです。
 - 対応プロバイダと主なモデル (`AIModelType`):
-  - OpenAI: `GPT4o`, `GPT5`, `GPT5_2`, `GPT5_4`, `GPT5_5`, `GPT5Mini`
+  - OpenAI: `GPT4o`, `GPT5`, `GPT5_2`, `GPT5_4`, `GPT5_5`, `GPT5_5AppServer`, `GPT5Mini`
   - Grok (x.ai): `Grok2`, `Grok3`, `Grok4_1`, `Grok4_1Reasoning`, `Grok4_2`, `Grok4_3`
   - Anthropic: `ClaudeSonnet46`, `ClaudeOpus46`
   - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImage`（旧 `Gemini25FlashImagePreview`）、`Gemini31`, `Gemini3ProImage`, `Gemini31FlashImage`（Vision / 画像生成に対応）
@@ -32,6 +32,19 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
   1. シーン上の `AIManagerBehaviour` コンポーネントに設定された値
   2. （Editor のみ）EditorUserSettings の `UnityLLMAPI.*` 値
   3. 環境変数（Process -> User -> Machine）
+
+### Codex App Server モード
+- `AIModelType.GPT5_5AppServer` は LLMAPI から Codex App Server を呼ぶための GPT-5.5 互換ルートです。通常の OpenAI API ではなく、設定された App Server の thread/turn/event プロトコルで実行します。
+- OpenAI/GPT 系モデル全体の送信先は `OpenAIEndpointMode` でも切り替えられます。既存の `AIManager.SendMessageAsync(...)` 呼び出しはそのまま利用できます。
+- 設定方法
+  - Editor: `Tools > UnityLLMAPI > Configure API Keys` で `CODEX_APP_SERVER_BASE_URL` に `ws://127.0.0.1:4500` のような WebSocket URL を保存します。`AIModelType.GPT5_5AppServer` を直接使う場合、`OpenAI Endpoint Mode` の変更は不要です。
+  - Runtime: `AIManagerBehaviour` に Codex App Server URL を設定します。既存の OpenAI/GPT モデル全体を App Server に向ける場合だけ `Override OpenAI Endpoint Settings` も有効にします。
+  - Code: 既存の OpenAI/GPT モデル全体を App Server に向ける場合だけ `AIManager.UseCodexAppServer("ws://127.0.0.1:4500");` を呼びます。
+- Codex App Server は単発 HTTP API ではなく JSON-RPC の thread/turn/event プロトコルです。このモードでは内部で `thread/start` -> `turn/start` を実行し、`item/agentMessage/delta` / `item/completed` / `turn/completed` を読んで既存のレスポンス形式へ変換します。
+- 実際の Codex モデルは app-server 側の設定値を既定で使います。明示的に変える場合は LLMAPI の `AIModelType` ではなく、App Server 専用の `CodexAppServerModelType` を使って `initBody["model"]` に反映します。
+- 画像認識などのマルチモーダル入力は `Message.parts` の `MessageContent.FromImage(...)` / `FromImageUrl(...)` を App Server の `image` / `localImage` input item に変換して送信します。
+- 構造化出力は Codex App Server の `outputSchema` を使います。Function Calling は直接の tool call ではなく、`outputSchema` による関数名 / 引数抽出へ変換して既存の `IJsonSchema` 戻り値と互換化します。画像生成は `$imagegen` skill を呼び、PNG を `Assets/...` に保存させてから `GeneratedImage` として読み戻します。Embedding はこのモードでは未対応です。
+- 実行サンプルは `Samples~/Example/CodexAppServerSample.cs` と `Samples~/Example/CodexAppServerImageGenSample.cs` です。Codex App Server URL は Editor 設定 / `AIManagerBehaviour` / 環境変数から解決されるため、サンプルごとの `serverUrl` は持ちません。GameObject に追加して Inspector の Context Menu から実行します。
 
 ## 3. 全体の利用フロー
 - メッセージを組み立てる：`Message`（`role` と `content`）と、必要に応じて `Message.parts` に `MessageContent`（テキスト / 画像）を設定。
@@ -226,6 +239,8 @@ if (response?.images.Count > 0)
 ```
 `MessageContent.FromImageData` / `FromImageUrl` も利用可能です。生成結果は `ImageGenerationResponse` に `GeneratedImage`（`mimeType`, `data`）として格納されます。
 
+Codex App Server モードで画像生成する場合は、LLMAPI の呼び出しモデルに `AIModelType.GPT5_5AppServer` を使い、`initBody["outputPath"]` に Unity プロジェクト相対パス（例: `Assets/Generated/coin_icon.png`）を指定します。Codex の実モデルを明示したい場合だけ、`CodexAppServerModelOptions.ApplyTo(initBody, CodexAppServerModelType.GPT5_5)` を使います。内部では `$imagegen` を含む turn を開始し、Codex が保存した PNG を UnityLLMAPI が読み戻します。
+
 ## 8. 埋め込みベクトル（Embedding）
 ```csharp
 using System.Collections.Generic;
@@ -254,9 +269,10 @@ var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpus);
 | `Samples~/Example/ExampleUsage.cs` | 通常チャット、構造化レスポンス、RealTime Schema、Function Calling を Inspector の ContextMenu から実行 |
 | `Samples~/Example/VisionSamples.cs` | Gemini 画像生成（編集）と Vision での画像説明のデモ。指示 + Texture2D を渡し、生成画像を保存 |
 | `Samples~/Example/EmbeddingSample.cs` | word2vec 風の近傍探索、Gemini Embedding 2 のマルチモーダル入力例、AudioClip を `Decompress On Load` 前提で使う音声クエリと Editor 向け VideoClip クエリ、`CorpusWords` から最も近い語を選ぶ例、同一コーパスでのコサイン類似度比較 |
-| `Samples~/Example/API_REFERENCE.md` | サンプルと主要 API の要点をまとめた簡易リファレンス |
+| `Samples~/Example/SAMPLE_GUIDE.md` | 実行サンプルの導入、ContextMenu、入力フィールド、Codex App Server / Embedding サンプルの注意点 |
+| `Samples~/APIReference/API_REFERENCE.md` | サンプルコードに依存しない主要 API の簡易リファレンス |
 
-各サンプルは MonoBehaviour をシーンに配置し、インスペクターの ContextMenu から実行できます。Vision サンプルはデフォルトで `Assets` 配下に PNG を保存します（必要に応じて `Application.persistentDataPath` などに変更してください）。
+Package Manager では `Example Usage` と `API Reference` を別々に import できます。各サンプルは MonoBehaviour をシーンに配置し、インスペクターの ContextMenu から実行できます。Vision サンプルはデフォルトで `Assets` 配下に PNG を保存します（必要に応じて `Application.persistentDataPath` などに変更してください）。
 
 ## 10. API クイックリファレンス
 

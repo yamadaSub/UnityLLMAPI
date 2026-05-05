@@ -1,30 +1,13 @@
-# UnityLLMAPI Sample API Reference
+# UnityLLMAPI API Reference
 
-This file is a compact reference for the sample package under `Samples~/Example`.
+This file is a compact reference for UnityLLMAPI's public API surface.
 It focuses on the APIs that are used most often from Unity scripts and includes
-small code examples that match the current package surface.
-Most sample MonoBehaviours in this package are intended to be run from the
-Inspector ContextMenu.
-
-## Included Sample Scripts
-
-- `ExampleUsage.cs`
-  - Basic chat
-  - Structured output with JSON Schema
-  - Real-time schema updates
-  - Function calling
-- `VisionSamples.cs`
-  - Vision prompts with images
-  - Gemini image editing / generation
-- `EmbeddingSample.cs`
-  - word2vec-style nearest-neighbor search
-  - Multimodal embeddings with Gemini Embedding 2
-  - AudioClip / VideoClip query examples that pick the nearest word from `CorpusWords`
-  - Cosine similarity comparison against the same corpus
+small code examples that are independent from the executable MonoBehaviour
+examples.
 
 ## Setup
 
-Set your API keys before running the samples:
+Set provider credentials before running API requests:
 
 - OpenAI: `OPENAI_API_KEY`
 - Grok: `GROK_API_KEY`
@@ -34,6 +17,81 @@ Set your API keys before running the samples:
 In the Unity Editor you can also use:
 
 - `Tools > UnityLLMAPI > Configure API Keys`
+
+## Endpoint And Model Metadata
+
+Use `AIManager.GetModelSpec(...)` to inspect the static registry entry for an
+`AIModelType`. Use `AIManager.GetResolvedModelSpec(...)` when you need the
+effective provider after endpoint overrides are applied.
+
+```csharp
+using UnityLLMAPI.Chat;
+
+var staticSpec = AIManager.GetModelSpec(AIModelType.GPT5_5);
+var effectiveSpec = AIManager.GetResolvedModelSpec(AIModelType.GPT5_5);
+
+if (effectiveSpec.Capabilities.HasFlag(AICapabilities.Vision))
+{
+    // This model route accepts image input.
+}
+```
+
+OpenAI/GPT routes normally use the OpenAI endpoint. To temporarily route those
+model types through Codex App Server, use:
+
+```csharp
+AIManager.UseCodexAppServer("ws://127.0.0.1:4500");
+AIManager.UseOpenAIEndpoint();
+AIManager.ClearOpenAIEndpointOverride();
+```
+
+`AIModelType.GPT5_5AppServer` is already a Codex App Server route and does not
+require the global endpoint override.
+
+## Codex App Server Mode
+
+`AIModelType.GPT5_5AppServer` routes GPT-5.5 requests through Codex App Server.
+OpenAI/GPT model requests can also be routed through Codex App Server without
+changing the existing `AIManager.SendMessageAsync(...)` call sites by using the
+endpoint mode.
+
+Configure one of:
+
+- Editor: `Tools > UnityLLMAPI > Configure API Keys`, and set
+  `CODEX_APP_SERVER_BASE_URL`. `AIModelType.GPT5_5AppServer` only needs the
+  URL; changing `OpenAI Endpoint Mode` is only for rerouting existing
+  OpenAI/GPT model calls.
+- Runtime component: add `AIManagerBehaviour` and set the Codex App Server URL.
+  Enable `Override OpenAI Endpoint Settings` only when existing OpenAI/GPT
+  model requests should also be routed through Codex App Server.
+- Code, only when rerouting existing OpenAI/GPT model calls:
+
+```csharp
+AIManager.UseCodexAppServer("ws://127.0.0.1:4500");
+```
+
+There is intentionally no code-only URL setter that leaves endpoint routing
+unchanged. For direct `AIModelType.GPT5_5AppServer` calls without rerouting
+other OpenAI/GPT models, set the URL through Editor settings,
+`AIManagerBehaviour`, or environment variables.
+
+Codex App Server mode expects a WebSocket JSON-RPC endpoint. The client creates
+a thread, starts a turn, reads `item/agentMessage/delta` and `item/completed`,
+and completes on `turn/completed`. Structured output uses Codex App Server
+`outputSchema`.
+The actual Codex model defaults to the app-server configuration; pass
+`CodexAppServerModelType` through `CodexAppServerModelOptions.ApplyTo(...)`
+only when you intentionally want a Codex-supported model override. This enum is
+separate from `AIModelType`; `AIModelType.GPT5_5AppServer` remains the LLMAPI
+compatible route model used for capability checks and provider routing.
+Multimodal inputs are supported through `Message.parts`; `MessageContent.FromImage(...)`
+and `FromImageUrl(...)` are converted to Codex App Server image input items.
+Function Calling is supported through structured output compatibility: the
+client asks Codex App Server for a function name and JSON argument string, then
+maps that back to the existing `IJsonSchema` result. Unity logs an informational
+message when this compatibility path is used. Image generation is
+supported by invoking Codex's `$imagegen` skill and reading back the PNG file
+that Codex saves under `Assets/...`. Embeddings are not supported by this mode.
 
 ## Chat Basics
 
@@ -64,6 +122,7 @@ Useful chat-oriented models:
 - `AIModelType.GPT5`
 - `AIModelType.GPT5_4`
 - `AIModelType.GPT5_5`
+- `AIModelType.GPT5_5AppServer`
 - `AIModelType.Grok4_1`
 - `AIModelType.Grok4_2`
 - `AIModelType.Grok4_3`
@@ -121,7 +180,7 @@ Image helpers:
 - `MessageContent.FromImageUrl(string url, string mime = null)`
 
 Vision-capable chat models include `ClaudeSonnet46`, `ClaudeOpus46`, `GPT4o`,
-`Gemini25Flash`, and `Gemini31`.
+`GPT5_5AppServer`, `Gemini25Flash`, and `Gemini31`.
 
 ## Structured Output
 
@@ -226,7 +285,7 @@ var messages = new List<Message>
 
 var functions = new List<IJsonSchema>
 {
-    new ExampleUsage.AddNumbersFunction()
+    new AddNumbersFunction()
 };
 
 var result = await AIManager.SendFunctionCallMessageAsync(
@@ -235,9 +294,53 @@ var result = await AIManager.SendFunctionCallMessageAsync(
     AIModelType.Gemini25Flash);
 ```
 
+Example function schema:
+
+```csharp
+using System.Collections.Generic;
+using UnityLLMAPI.Chat;
+using UnityLLMAPI.Schema;
+
+public class AddNumbersFunction : IJsonSchema
+{
+    public string Name => "add_numbers";
+
+    public Dictionary<string, object> GenerateJsonSchema()
+    {
+        return new Dictionary<string, object>
+        {
+            { "type", "function" },
+            { "name", Name },
+            { "description", "Add two numbers." },
+            {
+                "parameters",
+                new Dictionary<string, object>
+                {
+                    { "type", "object" },
+                    {
+                        "properties",
+                        new Dictionary<string, object>
+                        {
+                            { "a", new Dictionary<string, object> { { "type", "number" } } },
+                            { "b", new Dictionary<string, object> { { "type", "number" } } }
+                        }
+                    },
+                    { "required", new[] { "a", "b" } }
+                }
+            }
+        };
+    }
+}
+```
+
 ## Image Generation / Editing
 
 Use `GenerateImagesAsync(...)` or `GenerateImageAsync(...)` for Gemini image models.
+When OpenAI/GPT calls are routed through Codex App Server mode, these methods
+invoke `$imagegen`; pass `initBody["outputPath"]` as a Unity project relative
+path such as `Assets/Generated/coin_icon.png`. Use
+`AIModelType.GPT5_5AppServer` as the LLMAPI route model and
+`CodexAppServerModelType` only for the optional Codex turn model override.
 
 ```csharp
 using System.Collections.Generic;
@@ -273,11 +376,32 @@ var response = await AIManager.GenerateImagesAsync(
     initBody);
 ```
 
+Codex App Server image generation uses the same `GenerateImagesAsync(...)`
+entry point:
+
+```csharp
+var codexBody = new Dictionary<string, object>
+{
+    { "outputPath", "Assets/Generated/coin_icon.png" }
+};
+CodexAppServerModelOptions.ApplyTo(codexBody, CodexAppServerModelType.AppServerDefault);
+
+var codexImages = await AIManager.GenerateImagesAsync(
+    prompts,
+    AIModelType.GPT5_5AppServer,
+    codexBody);
+```
+
 Image-capable generation models:
 
 - `AIModelType.Gemini25FlashImage`
 - `AIModelType.Gemini31FlashImage`
 - `AIModelType.Gemini3ProImage`
+- `AIModelType.GPT5_5AppServer` when a Codex App Server URL is configured
+
+`ImageGenerationResponse.images` contains `GeneratedImage` values. Each image
+stores `mimeType` and raw `data`; use `ToBase64()` or `ToDataUrl()` when you
+need a text representation.
 
 ## Text Embeddings
 
@@ -356,19 +480,42 @@ var audioEmbedding = await EmbeddingManager.CreateEmbeddingAsync(
 
 `AudioClip` is encoded to WAV before upload and requires the clip importer Load Type to be `Decompress On Load`.
 `VideoClip` direct embedding depends on access to the source file and is intended for Editor workflows. Use `FromVideoData` or `FromFileUri` in player builds.
-`EmbeddingSample.cs` also exposes `multimodalText`, which is included together with the image, audio, or video part when those queries run. Leave it empty if you want to validate media-only retrieval.
-The sample builds embeddings for `CorpusWords`, embeds the assigned input, and logs the nearest match from that corpus.
 
-In `EmbeddingSample.cs`, assign `multimodalText`, `multimodalImageTexture`, `multimodalAudioClip`, or `multimodalVideoClip`,
-then run `Run Multimodal Query / Image`, `Run Multimodal Query / Audio`, or
-`Run Multimodal Query / Video` from the Inspector ContextMenu.
+## Embedding Vector Utilities
+
+`SerializableEmbedding` stores model metadata and vector values. It can be used
+directly for similarity search and vector arithmetic.
+
+```csharp
+using System.Collections.Generic;
+using UnityLLMAPI.Embedding;
+
+var score = queryEmbedding.CosineSimilarity(corpus[0]);
+var normalized = queryEmbedding.Normalized();
+var centroid = SerializableEmbedding.Average(corpus, normalize: true);
+```
+
+Useful members:
+
+- `Model`
+- `Dimension`
+- `Magnitude`
+- `ToFloatArray()`
+- `SetFromFloatArray(...)`
+- `Clone()`
+- `Dot(...)`
+- `CosineSimilarity(...)`
+- `Normalized()` / `NormalizeInPlace()`
+- `Add(...)`, `Sub(...)`, `Scale(...)`
+- `Average(...)`
+- `WeightedSum(...)`
 
 ### Resource Handling Notes
 
 - Images: `FromImage(Texture)` is convenient in Unity. For repeated requests, pre-encode to PNG bytes or keep your own cached bytes if you want to avoid repeated GPU readback / PNG encoding cost.
-- Audio: if you already have file bytes, prefer `FromAudioData(...)` or `FromFileUri(...)`. `FromAudioClip(...)` is a Unity convenience helper and only works when sample data is readable via `AudioClip.GetData`, which typically means `Load Type = Decompress On Load`.
+- Audio: if you already have file bytes, prefer `FromAudioData(...)` or `FromFileUri(...)`. `FromAudioClip(...)` is a Unity convenience helper and only works when PCM data is readable via `AudioClip.GetData`, which typically means `Load Type = Decompress On Load`.
 - Video: for packaged/runtime content, prefer `FromVideoData(...)` or `FromFileUri(...)`. `FromVideoClip(...)` is mainly for Editor workflows where Unity still has access to the imported source file.
-- Large media: this sample uses inline data for simplicity, but production code should avoid repeatedly embedding very large assets from scene references. Keep a stable raw-byte source such as `StreamingAssets`, downloaded files, Addressables payloads, or your own asset pipeline.
+- Large media: inline data is convenient for small assets, but production code should avoid repeatedly embedding very large assets from scene references. Keep a stable raw-byte source such as `StreamingAssets`, downloaded files, Addressables payloads, or your own asset pipeline.
 
 ## Main Types
 
@@ -378,6 +525,12 @@ then run `Run Multimodal Query / Image`, `Run Multimodal Query / Audio`, or
 - `MessageContent`
 - `AIManager`
 - `AIModelType`
+- `ModelSpec`
+- `AICapabilities`
+- `AIProvider`
+- `OpenAIEndpointMode`
+- `CodexAppServerModelType`
+- `CodexAppServerModelOptions`
 
 ### Schema / Function Calling
 
@@ -385,12 +538,27 @@ then run `Run Multimodal Query / Image`, `Run Multimodal Query / Audio`, or
 - `FunctionSchema<T>`
 - `RealTimeJsonSchema<T>`
 
+### Images
+
+- `ImageGenerationResponse`
+- `GeneratedImage`
+- `ImageGenerationRequest`
+
+### Provider-Level Results
+
+- `RawChatResult`
+- `RawChatStreamResult`
+- `RawImageResult`
+- `RawEmbeddingResult`
+- `ChatRequestOptions`
+
 ### Embeddings
 
 - `EmbeddingManager`
 - `EmbeddingModelType`
 - `EmbeddingInput`
 - `EmbeddingPart`
+- `SerializableEmbedding`
 
 ## Notes
 

@@ -1,7 +1,9 @@
 {
   "name": "LLMAPI.Editor",
   "rootNamespace": "",
-  "references": [],
+  "references": [
+    "LLMAPI"
+  ],
   "includePlatforms": ["Editor"],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

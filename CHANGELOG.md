@@ -2,6 +2,24 @@
 
 このプロジェクトの重要な変更を記録します。
 
+## 1.3.0
+
+### 追加
+- Codex App Server provider を追加し、`AIModelType.GPT5_5AppServer` から thread / turn / event ベースの App Server 実行を利用できるように追加。
+- `OpenAIEndpointMode` と `AIManager.UseCodexAppServer(...)` / `UseOpenAIEndpoint()` / `ClearOpenAIEndpointOverride()` を追加し、既存の OpenAI/GPT ルートを必要に応じて Codex App Server へ向けられるように追加。
+- `CodexAppServerModelType` / `CodexAppServerModelOptions` を追加し、LLMAPI の `AIModelType` とは別に Codex App Server turn の実モデル指定を扱えるように追加。
+- Codex App Server 用のチャット、ストリーミング、構造化出力、Function Calling 互換実行、マルチモーダル入力、`$imagegen` ベースの画像生成を追加。
+- Codex App Server の実行サンプル `CodexAppServerSample.cs` / `CodexAppServerImageGenSample.cs` を追加。
+- 実行サンプル向けドキュメント `Samples~/Example/SAMPLE_GUIDE.md` を追加。
+
+### 変更
+- Package Manager から API リファレンスと実行サンプルを別々に import できるように、`Samples~/APIReference` を分離。
+- API リファレンスをサンプルコード非依存の内容へ整理し、サンプル固有の説明を `SAMPLE_GUIDE.md` へ移動。
+- Codex App Server サンプルから個別の `serverUrl` フィールドを外し、Editor 設定 / `AIManagerBehaviour` / 環境変数の共通 URL 解決を使うように変更。
+- Codex App Server の実モデル指定を LLMAPI 互換ルートから分離し、サンプルと API Reference でも `CodexAppServerModelType` を使う形へ整理。
+- Codex App Server 画像生成で、承認対象を要求された出力ファイルに限定し、既存ファイルを誤って成功扱いしないよう更新時刻を確認するように変更。
+- Codex App Server 未起動 / URL 未設定時のログを日本語化し、Function Calling 互換実行の通知を Warning ではなく通常ログに変更。
+
 ## 1.2.9
 
 ### 追加
