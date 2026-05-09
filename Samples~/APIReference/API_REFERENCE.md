@@ -36,44 +36,33 @@ if (effectiveSpec.Capabilities.HasFlag(AICapabilities.Vision))
 }
 ```
 
-OpenAI/GPT routes normally use the OpenAI endpoint. To temporarily route those
-model types through Codex App Server, use:
+OpenAI/GPT routes always use their normal provider endpoints. Codex App Server
+is used only by explicit App Server model routes such as
+`AIModelType.GPT5_5AppServer`.
 
 ```csharp
-AIManager.UseCodexAppServer("ws://127.0.0.1:4500");
-AIManager.UseOpenAIEndpoint();
-AIManager.ClearOpenAIEndpointOverride();
+AIManager.SetCodexAppServerBaseUrl("ws://127.0.0.1:4500");
 ```
 
-`AIModelType.GPT5_5AppServer` is already a Codex App Server route and does not
-require the global endpoint override.
+`AIManager.UseCodexAppServer(...)` is kept only as a compatibility alias for
+setting the Codex App Server URL. It no longer reroutes normal OpenAI models.
 
 ## Codex App Server Mode
 
 `AIModelType.GPT5_5AppServer` routes GPT-5.5 requests through Codex App Server.
-OpenAI/GPT model requests can also be routed through Codex App Server without
-changing the existing `AIManager.SendMessageAsync(...)` call sites by using the
-endpoint mode.
+OpenAI/GPT model requests are not automatically routed through Codex App Server.
+Use `AIModelType.GPT5_5AppServer` when App Server behavior is intended.
 
 Configure one of:
 
-- Editor: `Tools > UnityLLMAPI > Configure API Keys`, and set
-  `CODEX_APP_SERVER_BASE_URL`. `AIModelType.GPT5_5AppServer` only needs the
-  URL; changing `OpenAI Endpoint Mode` is only for rerouting existing
-  OpenAI/GPT model calls.
+- Editor: `Tools > UnityLLMAPI > Codex App Server`, and set/start the
+  WebSocket endpoint such as `ws://127.0.0.1:4500`.
 - Runtime component: add `AIManagerBehaviour` and set the Codex App Server URL.
-  Enable `Override OpenAI Endpoint Settings` only when existing OpenAI/GPT
-  model requests should also be routed through Codex App Server.
-- Code, only when rerouting existing OpenAI/GPT model calls:
+- Code:
 
 ```csharp
-AIManager.UseCodexAppServer("ws://127.0.0.1:4500");
+AIManager.SetCodexAppServerBaseUrl("ws://127.0.0.1:4500");
 ```
-
-There is intentionally no code-only URL setter that leaves endpoint routing
-unchanged. For direct `AIModelType.GPT5_5AppServer` calls without rerouting
-other OpenAI/GPT models, set the URL through Editor settings,
-`AIManagerBehaviour`, or environment variables.
 
 Codex App Server mode expects a WebSocket JSON-RPC endpoint. The client creates
 a thread, starts a turn, reads `item/agentMessage/delta` and `item/completed`,
@@ -148,6 +137,72 @@ var stream = await AIManager.SendMessageStreamAsync(
 
 Debug.Log(stream?.Content);
 ```
+
+## Coroutine Requests
+
+Use `AIRequest` when a Unity coroutine should start an LLM request, do other
+work for a few frames, then only wait for the answer when it is actually needed.
+`AIRequest<T>` is a `CustomYieldInstruction`, so it can be yielded directly.
+
+```csharp
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityLLMAPI.Chat;
+
+IEnumerator RunEnemyPlan()
+{
+    var messages = new List<Message>
+    {
+        new Message { role = MessageRole.User, content = "Create a small enemy patrol plan." }
+    };
+
+    var request = AIRequest.SendStructured<EnemyPlan>(
+        messages,
+        AIModelType.Gemini25Flash,
+        timeoutSeconds: 60);
+
+    yield return PlayIntroAnimation();
+
+    if (!request.TryGetResult(out var plan))
+    {
+        yield return request;
+    }
+
+    if (request.TryGetResult(out plan))
+    {
+        ApplyPlan(plan);
+    }
+    else
+    {
+        Debug.LogWarning(request.ErrorMessage);
+    }
+
+    request.Dispose();
+}
+```
+
+Common factories:
+
+- `AIRequest.SendMessage(...)`
+- `AIRequest.SendMessageStream(...)`
+- `AIRequest.SendStructured<T>(...)` / `AIRequest.Structured<T>(...)`
+- `AIRequest.PopulateStructured(targetInstance, ...)`
+- `AIRequest.SendStructuredWithRealTimeSchema(...)`
+- `AIRequest.SendStructuredWithSchema(...)`
+- `AIRequest.SendFunctionCall(...)`
+- `AIRequest.GenerateImages(...)` / `AIRequest.GenerateImage(...)`
+
+Useful request members:
+
+- `yield return request`: wait until done; if already done, it resumes without
+  waiting for the network call.
+- `TryGetResult(out value)`: returns `true` only after a successful non-null
+  result.
+- `Status`, `IsDone`, `IsPending`, `IsCanceled`, `IsFaulted`, `ErrorMessage`:
+  inspect progress and failure state.
+- `Cancel()` / `Dispose()`: cancel a pending request. Stopping a coroutine alone
+  does not cancel the underlying provider call.
 
 ## Vision Input
 
@@ -336,11 +391,11 @@ public class AddNumbersFunction : IJsonSchema
 ## Image Generation / Editing
 
 Use `GenerateImagesAsync(...)` or `GenerateImageAsync(...)` for Gemini image models.
-When OpenAI/GPT calls are routed through Codex App Server mode, these methods
-invoke `$imagegen`; pass `initBody["outputPath"]` as a Unity project relative
-path such as `Assets/Generated/coin_icon.png`. Use
-`AIModelType.GPT5_5AppServer` as the LLMAPI route model and
-`CodexAppServerModelType` only for the optional Codex turn model override.
+When using Codex App Server image generation, call these methods with
+`AIModelType.GPT5_5AppServer`; the client invokes `$imagegen`. Pass
+`initBody["outputPath"]` as a Unity project relative path such as
+`Assets/Generated/coin_icon.png`. Use `CodexAppServerModelType` only for the
+optional Codex turn model override.
 
 ```csharp
 using System.Collections.Generic;
@@ -528,7 +583,6 @@ Useful members:
 - `ModelSpec`
 - `AICapabilities`
 - `AIProvider`
-- `OpenAIEndpointMode`
 - `CodexAppServerModelType`
 - `CodexAppServerModelOptions`
 

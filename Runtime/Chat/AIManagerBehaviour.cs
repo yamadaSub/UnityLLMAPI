@@ -21,22 +21,16 @@ namespace UnityLLMAPI.Chat
         [Tooltip("Anthropic API key used for Claude models.")]
         [SerializeField] private string anthropicApiKey;
 
-        [Header("OpenAI Endpoint Mode")]
-        [Tooltip("Override the OpenAI model endpoint mode for this scene.")]
-        [SerializeField] private bool overrideOpenAIEndpointSettings;
-
-        [Tooltip("Where OpenAI/GPT model requests are sent.")]
-        [SerializeField] private OpenAIEndpointMode openAIEndpointMode = OpenAIEndpointMode.OpenAI;
-
-        [Tooltip("Codex App Server WebSocket URL, e.g. ws://127.0.0.1:4500. Used by GPT5_5AppServer and Codex endpoint mode.")]
+        [Header("Codex App Server")]
+        [Tooltip("Codex App Server WebSocket URL, e.g. ws://127.0.0.1:4500. Used only by explicit Codex App Server models such as GPT5_5AppServer.")]
         [SerializeField] private string codexAppServerBaseUrl;
 
         public string OpenAIApiKey => openAIApiKey;
         public string GrokApiKey => grokApiKey;
         public string GoogleApiKey => googleApiKey;
         public string AnthropicApiKey => anthropicApiKey;
-        public bool OverrideOpenAIEndpointSettings => overrideOpenAIEndpointSettings;
-        public OpenAIEndpointMode OpenAIEndpointMode => openAIEndpointMode;
+        public bool OverrideOpenAIEndpointSettings => false;
+        public OpenAIEndpointMode OpenAIEndpointMode => OpenAIEndpointMode.OpenAI;
         public string CodexAppServerBaseUrl => codexAppServerBaseUrl;
 
         private void OnEnable()

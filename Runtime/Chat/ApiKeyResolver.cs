@@ -10,12 +10,10 @@ namespace UnityLLMAPI.Chat
     internal static class ApiKeyResolver
     {
         private const string EditorIgnoreKeysConfig = "UnityLLMAPI.IGNORE_EDITOR_KEYS";
-        private const string EditorOpenAIEndpointModeConfig = "UnityLLMAPI.OPENAI_ENDPOINT_MODE";
         private const string EditorCodexAppServerBaseUrlConfig = "UnityLLMAPI.CODEX_APP_SERVER_BASE_URL";
 
         private static AIManagerBehaviour cachedBehaviour;
-        private static bool hasOpenAIEndpointOverride;
-        private static OpenAIEndpointMode openAIEndpointOverrideMode;
+        private static bool hasCodexAppServerBaseUrlOverride;
         private static string codexAppServerBaseUrlOverride;
 
         public static string OpenAIApiKey => ResolveString(b => b.OpenAIApiKey, new[] { "OPENAI_API_KEY" });
@@ -23,7 +21,7 @@ namespace UnityLLMAPI.Chat
         public static string GoogleApiKey => ResolveString(b => b.GoogleApiKey, new[] { "GOOGLE_API_KEY" });
         public static string AnthropicApiKey => ResolveString(b => b.AnthropicApiKey, new[] { "ANTHROPIC_API_KEY" });
 
-        public static OpenAIEndpointMode OpenAIEndpointMode => ResolveOpenAIEndpointMode();
+        public static OpenAIEndpointMode OpenAIEndpointMode => OpenAIEndpointMode.OpenAI;
         public static string CodexAppServerBaseUrl => ResolveCodexAppServerBaseUrl();
 
         public static void RegisterBehaviour(AIManagerBehaviour behaviour)
@@ -42,15 +40,18 @@ namespace UnityLLMAPI.Chat
 
         public static void ConfigureOpenAIEndpoint(OpenAIEndpointMode mode, string codexAppServerBaseUrl = null)
         {
-            hasOpenAIEndpointOverride = true;
-            openAIEndpointOverrideMode = mode;
+            ConfigureCodexAppServerBaseUrl(codexAppServerBaseUrl);
+        }
+
+        public static void ConfigureCodexAppServerBaseUrl(string codexAppServerBaseUrl)
+        {
+            hasCodexAppServerBaseUrlOverride = !string.IsNullOrWhiteSpace(codexAppServerBaseUrl);
             codexAppServerBaseUrlOverride = codexAppServerBaseUrl;
         }
 
         public static void ClearOpenAIEndpointOverride()
         {
-            hasOpenAIEndpointOverride = false;
-            openAIEndpointOverrideMode = OpenAIEndpointMode.OpenAI;
+            hasCodexAppServerBaseUrlOverride = false;
             codexAppServerBaseUrlOverride = null;
         }
 
@@ -75,46 +76,12 @@ namespace UnityLLMAPI.Chat
 
         public static string GetRequiredCodexAppServerUrlHint()
         {
-            return "Codex App Server の WebSocket URL が未設定です。AIManagerBehaviour、AIManager.UseCodexAppServer(url)、Editor 設定の UnityLLMAPI.CODEX_APP_SERVER_BASE_URL、または環境変数 CODEX_APP_SERVER_BASE_URL / CODEX_APP_SERVER_URL に ws://127.0.0.1:4500 のような URL を設定してください。";
-        }
-
-        private static OpenAIEndpointMode ResolveOpenAIEndpointMode()
-        {
-            if (hasOpenAIEndpointOverride)
-            {
-                return openAIEndpointOverrideMode;
-            }
-
-            var behaviour = GetBehaviour();
-            if (behaviour != null && behaviour.OverrideOpenAIEndpointSettings)
-            {
-                return behaviour.OpenAIEndpointMode;
-            }
-
-#if UNITY_EDITOR
-            if (TryParseOpenAIEndpointMode(GetEditorConfigValue(EditorOpenAIEndpointModeConfig), out var editorMode))
-            {
-                return editorMode;
-            }
-#endif
-
-            if (TryParseOpenAIEndpointMode(
-                    ResolveEnvironmentValue(new[]
-                    {
-                        "UNITYLLMAPI_OPENAI_ENDPOINT_MODE",
-                        "OPENAI_ENDPOINT_MODE"
-                    }),
-                    out var envMode))
-            {
-                return envMode;
-            }
-
-            return OpenAIEndpointMode.OpenAI;
+            return "Codex App Server WebSocket URL is not configured. Set a URL such as ws://127.0.0.1:4500 via AIManagerBehaviour, AIManager.SetCodexAppServerBaseUrl(url), Tools > UnityLLMAPI > Codex App Server, UnityLLMAPI.CODEX_APP_SERVER_BASE_URL, or the CODEX_APP_SERVER_BASE_URL / CODEX_APP_SERVER_URL environment variable.";
         }
 
         private static string ResolveCodexAppServerBaseUrl()
         {
-            if (hasOpenAIEndpointOverride && !string.IsNullOrWhiteSpace(codexAppServerBaseUrlOverride))
+            if (hasCodexAppServerBaseUrlOverride && !string.IsNullOrWhiteSpace(codexAppServerBaseUrlOverride))
             {
                 return codexAppServerBaseUrlOverride;
             }
@@ -134,41 +101,6 @@ namespace UnityLLMAPI.Chat
 #endif
 
             return ResolveEnvironmentValue(new[] { "CODEX_APP_SERVER_BASE_URL", "CODEX_APP_SERVER_URL" });
-        }
-
-        private static bool TryParseOpenAIEndpointMode(string value, out OpenAIEndpointMode mode)
-        {
-            mode = OpenAIEndpointMode.OpenAI;
-            if (string.IsNullOrWhiteSpace(value)) return false;
-
-            var normalized = value.Trim();
-            if (int.TryParse(normalized, out var numeric)
-                && Enum.IsDefined(typeof(OpenAIEndpointMode), numeric))
-            {
-                mode = (OpenAIEndpointMode)numeric;
-                return true;
-            }
-
-            if (Enum.TryParse(normalized, true, out mode))
-            {
-                return true;
-            }
-
-            normalized = normalized.Replace("-", string.Empty).Replace("_", string.Empty).Replace(" ", string.Empty);
-            if (string.Equals(normalized, "codex", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(normalized, "codexappserver", StringComparison.OrdinalIgnoreCase))
-            {
-                mode = OpenAIEndpointMode.CodexAppServer;
-                return true;
-            }
-
-            if (string.Equals(normalized, "openai", StringComparison.OrdinalIgnoreCase))
-            {
-                mode = OpenAIEndpointMode.OpenAI;
-                return true;
-            }
-
-            return false;
         }
 
         private static string ResolveString(Func<AIManagerBehaviour, string> behaviourSelector, string[] envKeys)

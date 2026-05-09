@@ -239,6 +239,7 @@ public static class AIManager
     public static string GrokApiKey => ApiKeyResolver.GrokApiKey;
     public static string GoogleApiKey => ApiKeyResolver.GoogleApiKey;
     public static string AnthropicApiKey => ApiKeyResolver.AnthropicApiKey;
+    [Obsolete("Normal OpenAI models are no longer rerouted; this always returns OpenAI.")]
     public static OpenAIEndpointMode OpenAIEndpointMode => ApiKeyResolver.OpenAIEndpointMode;
     public static string CodexAppServerBaseUrl => ApiKeyResolver.CodexAppServerBaseUrl;
 
@@ -251,13 +252,22 @@ public static class AIManager
     public static ModelSpec GetModelSpec(AIModelType modelType) => ModelRegistry.Get(modelType);
     public static ModelSpec GetResolvedModelSpec(AIModelType modelType) => ResolveModelSpec(modelType);
 
+    [Obsolete("Normal OpenAI models are no longer rerouted. This only clears the Codex App Server URL override.")]
     public static void UseOpenAIEndpoint()
-        => ApiKeyResolver.ConfigureOpenAIEndpoint(OpenAIEndpointMode.OpenAI);
+        => ApiKeyResolver.ClearOpenAIEndpointOverride();
 
+    public static void SetCodexAppServerBaseUrl(string serverUrl)
+        => ApiKeyResolver.ConfigureCodexAppServerBaseUrl(serverUrl);
+
+    [Obsolete("Use SetCodexAppServerBaseUrl instead. This method no longer reroutes normal OpenAI models.")]
     public static void UseCodexAppServer(string serverUrl = null)
-        => ApiKeyResolver.ConfigureOpenAIEndpoint(OpenAIEndpointMode.CodexAppServer, serverUrl);
+        => SetCodexAppServerBaseUrl(serverUrl);
 
+    [Obsolete("Use ClearCodexAppServerBaseUrlOverride instead. Normal OpenAI models are no longer rerouted.")]
     public static void ClearOpenAIEndpointOverride()
+        => ClearCodexAppServerBaseUrlOverride();
+
+    public static void ClearCodexAppServerBaseUrlOverride()
         => ApiKeyResolver.ClearOpenAIEndpointOverride();
 
     #region Helpers
@@ -280,24 +290,7 @@ public static class AIManager
 
     private static ModelSpec ResolveModelSpec(AIModelType modelType)
     {
-        var spec = ModelRegistry.Get(modelType);
-        if (spec.Provider != AIProvider.OpenAI
-            || ApiKeyResolver.OpenAIEndpointMode != OpenAIEndpointMode.CodexAppServer)
-        {
-            return spec;
-        }
-
-        var capabilities = spec.Capabilities
-                           & ~AICapabilities.Embedding;
-
-        return new ModelSpec
-        {
-            ModelType = spec.ModelType,
-            Provider = AIProvider.CodexAppServer,
-            ModelId = spec.ModelId,
-            Capabilities = capabilities,
-            MaxContextTokens = spec.MaxContextTokens
-        };
+        return ModelRegistry.Get(modelType);
     }
 
     /// <summary>

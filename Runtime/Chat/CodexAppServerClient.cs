@@ -275,6 +275,7 @@ namespace UnityLLMAPI.Chat
             var token = timeoutCts?.Token ?? ct;
 
             var baseUrl = NormalizeWebSocketUrl(ApiKeyResolver.CodexAppServerBaseUrl);
+            baseUrl = NormalizeWebSocketUrl(await CodexAppServerConnectionBootstrap.TryEnsureReadyAsync(baseUrl, token));
             if (string.IsNullOrWhiteSpace(baseUrl))
             {
                 var message = ApiKeyResolver.GetRequiredCodexAppServerUrlHint();
@@ -857,6 +858,7 @@ namespace UnityLLMAPI.Chat
             CancellationToken ct)
         {
             var baseUrl = NormalizeWebSocketUrl(ApiKeyResolver.CodexAppServerBaseUrl);
+            baseUrl = NormalizeWebSocketUrl(await CodexAppServerConnectionBootstrap.TryEnsureReadyAsync(baseUrl, ct));
             if (string.IsNullOrWhiteSpace(baseUrl))
             {
                 return CodexSkillLookupResult.Skipped(ApiKeyResolver.GetRequiredCodexAppServerUrlHint());

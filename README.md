@@ -35,11 +35,11 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 
 ### Codex App Server モード
 - `AIModelType.GPT5_5AppServer` は LLMAPI から Codex App Server を呼ぶための GPT-5.5 互換ルートです。通常の OpenAI API ではなく、設定された App Server の thread/turn/event プロトコルで実行します。
-- OpenAI/GPT 系モデル全体の送信先は `OpenAIEndpointMode` でも切り替えられます。既存の `AIManager.SendMessageAsync(...)` 呼び出しはそのまま利用できます。
+- 通常の OpenAI/GPT 系モデルは Codex App Server へ自動リルートされません。Codex App Server を使う場合は `AIModelType.GPT5_5AppServer` を明示してください。
 - 設定方法
-  - Editor: `Tools > UnityLLMAPI > Configure API Keys` で `CODEX_APP_SERVER_BASE_URL` に `ws://127.0.0.1:4500` のような WebSocket URL を保存します。`AIModelType.GPT5_5AppServer` を直接使う場合、`OpenAI Endpoint Mode` の変更は不要です。
-  - Runtime: `AIManagerBehaviour` に Codex App Server URL を設定します。既存の OpenAI/GPT モデル全体を App Server に向ける場合だけ `Override OpenAI Endpoint Settings` も有効にします。
-  - Code: 既存の OpenAI/GPT モデル全体を App Server に向ける場合だけ `AIManager.UseCodexAppServer("ws://127.0.0.1:4500");` を呼びます。
+  - Editor: `Tools > UnityLLMAPI > Codex App Server` で `ws://127.0.0.1:4500` のような WebSocket URL を保存し、必要に応じて app-server を起動します。
+  - Runtime: `AIManagerBehaviour` に Codex App Server URL を設定します。
+  - Code: `AIManager.SetCodexAppServerBaseUrl("ws://127.0.0.1:4500");` で Codex App Server URL だけを明示設定できます。
 - Codex App Server は単発 HTTP API ではなく JSON-RPC の thread/turn/event プロトコルです。このモードでは内部で `thread/start` -> `turn/start` を実行し、`item/agentMessage/delta` / `item/completed` / `turn/completed` を読んで既存のレスポンス形式へ変換します。
 - 実際の Codex モデルは app-server 側の設定値を既定で使います。明示的に変える場合は LLMAPI の `AIModelType` ではなく、App Server 専用の `CodexAppServerModelType` を使って `initBody["model"]` に反映します。
 - 画像認識などのマルチモーダル入力は `Message.parts` の `MessageContent.FromImage(...)` / `FromImageUrl(...)` を App Server の `image` / `localImage` input item に変換して送信します。

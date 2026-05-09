@@ -3,7 +3,6 @@
 using UnityEditor;
 using UnityEngine;
 using System;
-using UnityLLMAPI.Chat;
 
 namespace UnityLLMAPI.Editor
 {
@@ -13,17 +12,15 @@ namespace UnityLLMAPI.Editor
         private const string PrefGrok   = "UnityLLMAPI.GROK_API_KEY";
         private const string PrefGoogle = "UnityLLMAPI.GOOGLE_API_KEY";
         private const string PrefAnthropic = "UnityLLMAPI.ANTHROPIC_API_KEY";
-        private const string PrefOpenAIEndpointMode = "UnityLLMAPI.OPENAI_ENDPOINT_MODE";
-        private const string PrefCodexAppServerBaseUrl = "UnityLLMAPI.CODEX_APP_SERVER_BASE_URL";
+        private const string LegacyPrefOpenAIEndpointMode = "UnityLLMAPI.OPENAI_ENDPOINT_MODE";
 
         private string openAI;
         private string grok;
         private string google;
         private string anthropic;
-        private OpenAIEndpointMode openAIEndpointMode = OpenAIEndpointMode.OpenAI;
-        private string codexAppServerBaseUrl;
         private bool showValues = false;
         private bool ignoreEditorKeys = false;
+        private Vector2 scroll;
 
         private const string PrefIgnoreEditorKeys = "UnityLLMAPI.IGNORE_EDITOR_KEYS";
 
@@ -31,7 +28,7 @@ namespace UnityLLMAPI.Editor
         public static void Open()
         {
             var win = GetWindow<ApiKeySettingsWindow>(true, "Unity LLM API Keys", true);
-            win.minSize = new Vector2(560, 460);
+            win.minSize = new Vector2(620, 520);
             win.Show();
         }
 
@@ -41,9 +38,8 @@ namespace UnityLLMAPI.Editor
             grok   = LoadKey(PrefGrok);
             google = LoadKey(PrefGoogle);
             anthropic = LoadKey(PrefAnthropic);
-            openAIEndpointMode = LoadOpenAIEndpointMode(PrefOpenAIEndpointMode, OpenAIEndpointMode.OpenAI);
-            codexAppServerBaseUrl = LoadKey(PrefCodexAppServerBaseUrl);
             ignoreEditorKeys = LoadBool(PrefIgnoreEditorKeys, false);
+            SaveKey(LegacyPrefOpenAIEndpointMode, null);
         }
 
         private void Save()
@@ -52,22 +48,27 @@ namespace UnityLLMAPI.Editor
             SaveKey(PrefGrok,   grok);
             SaveKey(PrefGoogle, google);
             SaveKey(PrefAnthropic, anthropic);
-            SaveKey(PrefOpenAIEndpointMode, openAIEndpointMode.ToString());
-            SaveKey(PrefCodexAppServerBaseUrl, codexAppServerBaseUrl);
+            SaveKey(LegacyPrefOpenAIEndpointMode, null);
             ShowNotification(new GUIContent("Saved project keys."));
         }
 
         private void ClearAll()
         {
+            if (!EditorUtility.DisplayDialog(
+                    "Clear stored API keys?",
+                    "This will remove UnityLLMAPI EditorUserSettings API keys. Environment variables and Codex App Server settings are not changed.",
+                    "Clear Stored Keys",
+                    "Cancel"))
+            {
+                return;
+            }
+
             SaveKey(PrefOpenAI, null);
             SaveKey(PrefGrok,   null);
             SaveKey(PrefGoogle, null);
             SaveKey(PrefAnthropic, null);
-            SaveKey(PrefOpenAIEndpointMode, null);
-            SaveKey(PrefCodexAppServerBaseUrl, null);
+            SaveKey(LegacyPrefOpenAIEndpointMode, null);
             openAI = grok = google = anthropic = string.Empty;
-            openAIEndpointMode = OpenAIEndpointMode.OpenAI;
-            codexAppServerBaseUrl = string.Empty;
             ShowNotification(new GUIContent("Cleared stored keys."));
         }
 
@@ -75,13 +76,6 @@ namespace UnityLLMAPI.Editor
         {
             var value = EditorUserSettings.GetConfigValue(key);
             return string.IsNullOrEmpty(value) ? string.Empty : value;
-        }
-
-        private static OpenAIEndpointMode LoadOpenAIEndpointMode(string key, OpenAIEndpointMode defaultValue)
-        {
-            var stored = EditorUserSettings.GetConfigValue(key);
-            if (string.IsNullOrEmpty(stored)) return defaultValue;
-            return Enum.TryParse(stored, true, out OpenAIEndpointMode mode) ? mode : defaultValue;
         }
 
         private static void SaveKey(string key, string value)
@@ -135,98 +129,84 @@ namespace UnityLLMAPI.Editor
             var display = string.IsNullOrEmpty(envVal)
                 ? "(not set)"
                 : mask ? Mask(envVal) : envVal;
-            EditorGUILayout.LabelField($"Env {key}", display);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField("Env", GUILayout.Width(72));
+                EditorGUILayout.LabelField(key, EditorStyles.miniLabel, GUILayout.MinWidth(150));
+                EditorGUILayout.SelectableLabel(display, EditorStyles.label, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+            }
         }
 
         private void OnGUI()
         {
-            EditorGUILayout.HelpBox(
-                "Keys and local endpoint settings are NOT saved in assets. Endpoint settings resolve in order: AIManager override -> AIManagerBehaviour -> EditorUserSettings -> Environment Variables.",
-                MessageType.Info);
+            DrawHeader();
 
-            using (new EditorGUILayout.HorizontalScope())
+            DrawOptions();
+
+            scroll = EditorGUILayout.BeginScrollView(scroll);
+
+            DrawKeySection("OpenAI", new[] { "OPENAI_API_KEY" }, ref openAI, PrefOpenAI);
+
+            DrawKeySection("Grok (x.ai)", new[] { "GROK_API_KEY" }, ref grok, PrefGrok);
+            DrawKeySection("Google (Gemini)", new[] { "GOOGLE_API_KEY" }, ref google, PrefGoogle);
+            DrawKeySection("Anthropic (Claude)", new[] { "ANTHROPIC_API_KEY" }, ref anthropic, PrefAnthropic);
+
+            EditorGUILayout.EndScrollView();
+
+            DrawFooterActions();
+        }
+
+        private void DrawHeader()
+        {
+            using (new EditorGUILayout.VerticalScope("box"))
             {
-                GUILayout.Label("Show values", GUILayout.Width(90));
-                showValues = EditorGUILayout.Toggle(showValues);
-            }
-
-            EditorGUILayout.Space(4);
-
-            EditorGUI.BeginChangeCheck();
-            ignoreEditorKeys = EditorGUILayout.ToggleLeft("パッケージ動作をテストする（Editor設定を無視）", ignoreEditorKeys);
-            if (EditorGUI.EndChangeCheck())
-            {
-                SaveBool(PrefIgnoreEditorKeys, ignoreEditorKeys);
-            }
-
-            if (ignoreEditorKeys)
-            {
-                EditorGUILayout.HelpBox("パッケージ動作テスト中: EditorUserSettings に保存された API キーは API 呼び出しで使用されません。入力欄は参照のみで編集できません。", MessageType.Info);
-            }
-
-            DrawKeySection(
-                title: "OpenAI",
-                envNames: new[] { "OPENAI_API_KEY" },
-                refValue: ref openAI,
-                prefKey: PrefOpenAI);
-
-            DrawOpenAIEndpointSection();
-
-            DrawKeySection(
-                title: "Grok (x.ai)",
-                envNames: new[] { "GROK_API_KEY" },
-                refValue: ref grok,
-                prefKey: PrefGrok);
-
-            DrawKeySection(
-                title: "Google (Gemini)",
-                envNames: new[] { "GOOGLE_API_KEY" },
-                refValue: ref google,
-                prefKey: PrefGoogle);
-
-            DrawKeySection(
-                title: "Anthropic (Claude)",
-                envNames: new[] { "ANTHROPIC_API_KEY" },
-                refValue: ref anthropic,
-                prefKey: PrefAnthropic);
-
-            GUILayout.FlexibleSpace();
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                if (GUILayout.Button("Save (Project)", GUILayout.Height(26))) Save();
-                if (GUILayout.Button("Clear", GUILayout.Height(26))) ClearAll();
+                EditorGUILayout.LabelField("Unity LLM API Keys", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField(
+                    "Stored in EditorUserSettings, not assets. Runtime resolves values from AIManager overrides, scene settings, EditorUserSettings, then environment variables.",
+                    EditorStyles.wordWrappedMiniLabel);
             }
         }
 
-        private void DrawOpenAIEndpointSection()
+        private void DrawOptions()
         {
-            EditorGUILayout.Space(8);
-            EditorGUILayout.LabelField("OpenAI Endpoint Mode", EditorStyles.boldLabel);
-
             using (new EditorGUILayout.VerticalScope("box"))
             {
-                DrawEnvStatus("CODEX_APP_SERVER_BASE_URL", mask: false);
-                DrawEnvStatus("CODEX_APP_SERVER_URL", mask: false);
-                DrawEnvStatus("OPENAI_ENDPOINT_MODE", mask: false);
-                DrawEnvStatus("UNITYLLMAPI_OPENAI_ENDPOINT_MODE", mask: false);
+                showValues = EditorGUILayout.ToggleLeft("Show key values", showValues);
+
+                EditorGUI.BeginChangeCheck();
+                ignoreEditorKeys = EditorGUILayout.ToggleLeft("Ignore EditorUserSettings for package behavior tests", ignoreEditorKeys);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    SaveBool(PrefIgnoreEditorKeys, ignoreEditorKeys);
+                }
+
+                if (ignoreEditorKeys)
+                {
+                    EditorGUILayout.LabelField("Editor-stored keys are ignored by API calls while this is enabled.", EditorStyles.wordWrappedMiniLabel);
+                }
             }
+        }
 
-            using (new EditorGUI.DisabledScope(ignoreEditorKeys))
+        private void DrawFooterActions()
+        {
+            using (new EditorGUILayout.HorizontalScope("box"))
             {
-                openAIEndpointMode = (OpenAIEndpointMode)EditorGUILayout.EnumPopup(
-                    $"Project Mode ({PrefOpenAIEndpointMode})",
-                    openAIEndpointMode);
+                if (GUILayout.Button("Save", GUILayout.Width(100), GUILayout.Height(28)))
+                {
+                    Save();
+                }
 
-                codexAppServerBaseUrl = EditorGUILayout.TextField(
-                    $"Codex App Server URL ({PrefCodexAppServerBaseUrl})",
-                    codexAppServerBaseUrl);
-            }
+                if (GUILayout.Button("Close", GUILayout.Width(90), GUILayout.Height(28)))
+                {
+                    Close();
+                }
 
-            if (openAIEndpointMode == OpenAIEndpointMode.CodexAppServer)
-            {
-                EditorGUILayout.HelpBox(
-                    "Codex App Server mode expects a WebSocket JSON-RPC endpoint, for example ws://127.0.0.1:4500. http:// and https:// values are converted to ws:// and wss:// at runtime. Enable this mode only when routing existing OpenAI/GPT models to App Server; AIModelType.GPT5_5AppServer only needs the URL.",
-                    MessageType.Info);
+                GUILayout.FlexibleSpace();
+
+                if (GUILayout.Button("Clear Stored Keys...", GUILayout.Width(150), GUILayout.Height(28)))
+                {
+                    ClearAll();
+                }
             }
         }
 
@@ -235,41 +215,39 @@ namespace UnityLLMAPI.Editor
             EditorGUILayout.Space(8);
             EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
 
-            // Environment status
             using (new EditorGUILayout.VerticalScope("box"))
             {
                 foreach (var env in envNames)
                 {
                     DrawEnvStatus(env, mask: true);
                 }
-            }
 
-            // Input field (project-scoped value)
-            var label = $"Project Key ({prefKey})";
-            if (ignoreEditorKeys)
-            {
-                using (new EditorGUI.DisabledScope(true))
+                using (new EditorGUI.DisabledScope(ignoreEditorKeys))
                 {
-                    if (showValues)
+                    using (new EditorGUILayout.HorizontalScope())
                     {
-                        EditorGUILayout.TextField(label, string.Empty);
-                    }
-                    else
-                    {
-                        EditorGUILayout.PasswordField(label, string.Empty);
+                        EditorGUILayout.LabelField("Project Key", GUILayout.Width(96));
+                        var displayedValue = ignoreEditorKeys ? string.Empty : refValue;
+                        if (showValues)
+                        {
+                            var updatedValue = EditorGUILayout.TextField(displayedValue);
+                            if (!ignoreEditorKeys)
+                            {
+                                refValue = updatedValue;
+                            }
+                        }
+                        else
+                        {
+                            var updatedValue = EditorGUILayout.PasswordField(displayedValue);
+                            if (!ignoreEditorKeys)
+                            {
+                                refValue = updatedValue;
+                            }
+                        }
                     }
                 }
 
-                return;
-            }
-
-            if (showValues)
-            {
-                refValue = EditorGUILayout.TextField(label, refValue);
-            }
-            else
-            {
-                refValue = EditorGUILayout.PasswordField(label, refValue);
+                EditorGUILayout.LabelField("Stored in " + prefKey, EditorStyles.miniLabel);
             }
         }
 

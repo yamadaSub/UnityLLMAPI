@@ -30,6 +30,10 @@ In the Unity Editor you can also use:
   - Structured output with JSON Schema
   - Real-time schema updates
   - Function calling
+- `CoroutineRequestSample.cs`
+  - Starts an LLM request from a coroutine
+  - Runs local coroutine work while the request is pending
+  - Waits for the request only when the result is needed
 - `VisionSamples.cs`
   - Vision prompts with images
   - Gemini image editing / generation
