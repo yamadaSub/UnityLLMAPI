@@ -1,6 +1,12 @@
 UnityLLMAPI
 ===========
 
+Codex App Server note: the `AIModelType.GPT5_5AppServer` route is an
+AIManager compatibility route for single-shot calls. UnityLLMAPI starts App
+Server threads with `ephemeral: true` by default and does not persist or reuse
+the returned `threadId`. Pass `initBody["thread"]["ephemeral"] = false` only
+when you intentionally want a saved Codex thread for debugging.
+
 Unity から複数の LLM / Embedding API を共通の API で扱うためのラッパーライブラリです。OpenAI / Grok / Gemini をまとめて、チャット、JSON Schema ベースの構造化応答、Function Calling、画像生成、Embedding を Unity のコードだけで呼び出せます。
 
 ## 1. 概要
@@ -37,7 +43,7 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 - `AIModelType.GPT5_5AppServer` は LLMAPI から Codex App Server を呼ぶための GPT-5.5 互換ルートです。通常の OpenAI API ではなく、設定された App Server の thread/turn/event プロトコルで実行します。
 - 通常の OpenAI/GPT 系モデルは Codex App Server へ自動リルートされません。Codex App Server を使う場合は `AIModelType.GPT5_5AppServer` を明示してください。
 - 設定方法
-  - Editor: `Tools > UnityLLMAPI > Codex App Server` で `ws://127.0.0.1:4500` のような WebSocket URL を保存し、必要に応じて app-server を起動します。
+  - Editor: `Tools > UnityLLMAPI > Codex App Server` で `ws://127.0.0.1:4500` のような WebSocket URL を保存し、必要に応じて app-server を起動します。履歴分離のためプロジェクト専用 `CODEX_HOME` を使い、必要な `auth.json` / `config.toml` だけを通常の Codex CLI プロファイルから同期できます。
   - Runtime: `AIManagerBehaviour` に Codex App Server URL を設定します。
   - Code: `AIManager.SetCodexAppServerBaseUrl("ws://127.0.0.1:4500");` で Codex App Server URL だけを明示設定できます。
 - Codex App Server は単発 HTTP API ではなく JSON-RPC の thread/turn/event プロトコルです。このモードでは内部で `thread/start` -> `turn/start` を実行し、`item/agentMessage/delta` / `item/completed` / `turn/completed` を読んで既存のレスポンス形式へ変換します。

@@ -23,6 +23,7 @@
 - 通常の OpenAI/GPT モデルは Codex App Server へ自動リルートしない仕様に変更し、App Server 利用は `AIModelType.GPT5_5AppServer` の明示指定に限定。
 - `AIManager.UseCodexAppServer(...)` / `UseOpenAIEndpoint()` / `ClearOpenAIEndpointOverride()` は互換 API として残しつつ、通常 OpenAI/GPT モデルの送信先を変更しないように変更。
 - API Keys ウィンドウから Codex App Server 設定と OpenAI Endpoint Mode を分離し、Codex App Server 専用ツールへ移動。Clear 操作には確認ダイアログを追加。
+- Codex App Server ツールは履歴分離のためプロジェクト専用 `CODEX_HOME` を維持しつつ、通常の Codex CLI プロファイルから `auth.json` / `config.toml` だけを同期できるように変更。ログは ANSI 制御文字を除去し、コピーできるテキスト欄に変更。
 - Codex App Server 未起動 / URL 未設定時のログを更新し、Function Calling 互換実行の通知を Warning ではなく通常ログに変更。
 
 ## 1.2.9

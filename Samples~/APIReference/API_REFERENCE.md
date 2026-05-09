@@ -56,7 +56,9 @@ Use `AIModelType.GPT5_5AppServer` when App Server behavior is intended.
 Configure one of:
 
 - Editor: `Tools > UnityLLMAPI > Codex App Server`, and set/start the
-  WebSocket endpoint such as `ws://127.0.0.1:4500`.
+  WebSocket endpoint such as `ws://127.0.0.1:4500`. Unity-managed Codex CLI
+  processes run with a project-scoped `CODEX_HOME`, so app-server sessions do
+  not share the Codex Desktop history directory.
 - Runtime component: add `AIManagerBehaviour` and set the Codex App Server URL.
 - Code:
 
@@ -68,6 +70,11 @@ Codex App Server mode expects a WebSocket JSON-RPC endpoint. The client creates
 a thread, starts a turn, reads `item/agentMessage/delta` and `item/completed`,
 and completes on `turn/completed`. Structured output uses Codex App Server
 `outputSchema`.
+AIManager compatibility calls are single-shot: they do not persist or reuse the
+returned App Server `threadId`. The client therefore starts threads as
+`ephemeral: true` by default and sets `serviceName` to `unityllmapi`. To keep a
+thread on disk for debugging, pass `initBody["thread"]["ephemeral"] = false`
+explicitly.
 The actual Codex model defaults to the app-server configuration; pass
 `CodexAppServerModelType` through `CodexAppServerModelOptions.ApplyTo(...)`
 only when you intentionally want a Codex-supported model override. This enum is
@@ -446,6 +453,10 @@ var codexImages = await AIManager.GenerateImagesAsync(
     AIModelType.GPT5_5AppServer,
     codexBody);
 ```
+
+Codex App Server image generation also uses an ephemeral thread by default.
+Keep `outputPath` at the top level of `initBody`; thread options belong under
+`initBody["thread"]`.
 
 Image-capable generation models:
 

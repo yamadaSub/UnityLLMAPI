@@ -20,6 +20,12 @@ namespace UnityLLMAPI.Chat
         private const string ClientTitle = "UnityLLMAPI";
         private const string ClientVersion = "1.0.0";
         private const string InternalSkillInputKey = "__codexSkillInput";
+        private const int DefaultTurnTimeoutSeconds = 180;
+        private const int DefaultImageTurnTimeoutSeconds = 600;
+
+        private static readonly object TurnGateLock = new object();
+        private static readonly Dictionary<string, CodexTurnGate> TurnGates =
+            new Dictionary<string, CodexTurnGate>(StringComparer.Ordinal);
 
         private static readonly HashSet<string> AllowedTurnStartKeys = new HashSet<string>
         {
@@ -191,7 +197,8 @@ namespace UnityLLMAPI.Chat
                     null,
                     ct,
                     target.AbsolutePath,
-                    target.ProjectRoot);
+                    target.ProjectRoot,
+                    DefaultImageTurnTimeoutSeconds);
                 if (!result.IsSuccess)
                 {
                     return FailureImageResult(model, result.ErrorMessage, result.RawEventLog);
@@ -269,71 +276,92 @@ namespace UnityLLMAPI.Chat
             Action<string> onContentDelta,
             CancellationToken ct,
             string allowedFileChangePath = null,
-            string fileChangeRoot = null)
+            string fileChangeRoot = null,
+            int defaultTimeoutSeconds = DefaultTurnTimeoutSeconds)
         {
-            using var timeoutCts = CreateTimeoutTokenSource(options?.TimeoutSeconds ?? -1, ct);
+            var timeoutSeconds = ResolveTurnTimeoutSeconds(options?.TimeoutSeconds ?? -1, defaultTimeoutSeconds);
+            using var timeoutCts = CreateTimeoutTokenSource(timeoutSeconds, ct);
             var token = timeoutCts?.Token ?? ct;
-
-            var baseUrl = NormalizeWebSocketUrl(ApiKeyResolver.CodexAppServerBaseUrl);
-            baseUrl = NormalizeWebSocketUrl(await CodexAppServerConnectionBootstrap.TryEnsureReadyAsync(baseUrl, token));
-            if (string.IsNullOrWhiteSpace(baseUrl))
-            {
-                var message = ApiKeyResolver.GetRequiredCodexAppServerUrlHint();
-                Debug.LogError(message);
-                return CodexTurnResult.Failure(message);
-            }
-
             var state = new CodexTurnState(onContentDelta, allowedFileChangePath, fileChangeRoot);
+
             try
             {
+                var baseUrl = NormalizeWebSocketUrl(ApiKeyResolver.CodexAppServerBaseUrl);
+                baseUrl = NormalizeWebSocketUrl(await CodexAppServerConnectionBootstrap.TryEnsureReadyAsync(baseUrl, token));
+                if (string.IsNullOrWhiteSpace(baseUrl))
+                {
+                    var message = ApiKeyResolver.GetRequiredCodexAppServerUrlHint();
+                    Debug.LogError(message);
+                    return CodexTurnResult.Failure(message);
+                }
+
+                var gateKey = BuildTurnGateKey(baseUrl, model, options?.AdditionalBody, fileChangeRoot);
+                using var gateLease = await AcquireTurnGateAsync(gateKey, token, timeoutSeconds, ct);
                 using var socket = await OpenConnectionAsync(baseUrl, token);
 
-                var nextId = 1;
-                await SendRequestAndWaitAsync(socket, nextId++, "initialize", BuildInitializeParams(), state, token);
-                await SendNotificationAsync(socket, "initialized", new Dictionary<string, object>(), token);
-
-                var threadResponse = await SendRequestAndWaitAsync(
-                    socket,
-                    nextId++,
-                    "thread/start",
-                    BuildThreadStartParams(options?.AdditionalBody),
-                    state,
-                    token);
-                var threadId = ExtractThreadId(threadResponse) ?? state.ThreadId;
-                if (string.IsNullOrEmpty(threadId))
+                try
                 {
-                    return state.ToResult(false, "Codex App Server did not return a thread id.");
-                }
+                    var nextId = 1;
+                    await SendRequestAndWaitAsync(socket, nextId++, "initialize", BuildInitializeParams(), state, token);
+                    await SendNotificationAsync(socket, "initialized", new Dictionary<string, object>(), token);
 
-                state.ThreadId = threadId;
-                var turnResponse = await SendRequestAndWaitAsync(
-                    socket,
-                    nextId++,
-                    "turn/start",
-                    BuildTurnStartParams(threadId, messages, options?.AdditionalBody, outputSchema),
-                    state,
-                    token);
-                state.TurnId = ExtractTurnId(turnResponse) ?? state.TurnId;
-
-                while (!state.IsTurnCompleted)
-                {
-                    var text = await ReceiveTextMessageAsync(socket, token);
-                    if (text == null)
+                    var threadResponse = await SendRequestAndWaitAsync(
+                        socket,
+                        nextId++,
+                        "thread/start",
+                        BuildThreadStartParams(options?.AdditionalBody),
+                        state,
+                        token);
+                    var threadId = ExtractThreadId(threadResponse) ?? state.ThreadId;
+                    if (string.IsNullOrEmpty(threadId))
                     {
-                        return state.ToResult(false, "Codex App Server closed the connection before turn/completed.");
+                        return state.ToResult(false, "Codex App Server did not return a thread id.");
                     }
 
-                    state.RecordRaw(text);
-                    var message = TryParseObject(text);
-                    if (message == null) continue;
-                    if (message["error"] != null)
-                    {
-                        state.ErrorMessage = message["error"]?.ToString(Formatting.None);
-                    }
-                    await HandleServerMessageAsync(socket, message, state, token);
-                }
+                    state.ThreadId = threadId;
+                    var turnResponse = await SendRequestAndWaitAsync(
+                        socket,
+                        nextId++,
+                        "turn/start",
+                        BuildTurnStartParams(threadId, messages, options?.AdditionalBody, outputSchema),
+                        state,
+                        token);
+                    state.TurnId = ExtractTurnId(turnResponse) ?? state.TurnId;
 
-                await CloseSocketQuietlyAsync(socket);
+                    while (!state.IsTurnCompleted)
+                    {
+                        var text = await ReceiveTextMessageAsync(socket, token);
+                        if (text == null)
+                        {
+                            return state.ToResult(false, "Codex App Server closed the connection before turn/completed.");
+                        }
+
+                        state.RecordRaw(text);
+                        var message = TryParseObject(text);
+                        if (message == null) continue;
+                        if (message["error"] != null)
+                        {
+                            state.ErrorMessage = message["error"]?.ToString(Formatting.None);
+                        }
+                        await HandleServerMessageAsync(socket, message, state, token);
+                    }
+                }
+                finally
+                {
+                    await CloseSocketQuietlyAsync(socket);
+                }
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested && timeoutSeconds > 0)
+            {
+                return state.ToResult(false, BuildTurnTimeoutMessage(timeoutSeconds));
+            }
+            catch (OperationCanceledException ex) when (ct.IsCancellationRequested)
+            {
+                return state.ToResult(false, "Codex App Server turn was canceled: " + ex.Message);
+            }
+            catch (CodexTurnGateTimeoutException ex)
+            {
+                return state.ToResult(false, ex.Message);
             }
             catch (CodexAppServerConnectionException ex)
             {
@@ -373,9 +401,21 @@ namespace UnityLLMAPI.Chat
         private static Dictionary<string, object> BuildThreadStartParams(Dictionary<string, object> additionalBody)
         {
             var thread = TryGetDictionary(additionalBody, "thread");
-            return thread == null
+            var body = thread == null
                 ? new Dictionary<string, object>()
                 : new Dictionary<string, object>(thread);
+
+            if (!body.TryGetValue("ephemeral", out var ephemeral) || IsNullLike(ephemeral))
+            {
+                body["ephemeral"] = true;
+            }
+
+            if (!body.TryGetValue("serviceName", out var serviceName) || IsNullLike(serviceName))
+            {
+                body["serviceName"] = ClientName;
+            }
+
+            return body;
         }
 
         private static Dictionary<string, object> BuildTurnStartParams(
@@ -633,6 +673,137 @@ namespace UnityLLMAPI.Chat
             timeoutCts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
             return timeoutCts;
         }
+
+        private static int ResolveTurnTimeoutSeconds(int requestedTimeoutSeconds, int defaultTimeoutSeconds)
+        {
+            if (requestedTimeoutSeconds > 0) return requestedTimeoutSeconds;
+            if (requestedTimeoutSeconds == 0) return 0;
+            return defaultTimeoutSeconds > 0 ? defaultTimeoutSeconds : 0;
+        }
+
+        private static string BuildTurnTimeoutMessage(int timeoutSeconds)
+            => "Codex App Server turn timed out after " + timeoutSeconds + "s.";
+
+        private static string BuildTurnSlotTimeoutMessage(int timeoutSeconds)
+            => "Codex App Server turn timed out while waiting for Codex App Server turn slot after " + timeoutSeconds + "s.";
+
+        private static async Task<CodexTurnGateLease> AcquireTurnGateAsync(
+            string key,
+            CancellationToken token,
+            int timeoutSeconds,
+            CancellationToken callerToken)
+        {
+            var gate = RetainTurnGate(key);
+            try
+            {
+                await gate.Semaphore.WaitAsync(token);
+                return new CodexTurnGateLease(key, gate);
+            }
+            catch (OperationCanceledException ex) when (!callerToken.IsCancellationRequested && timeoutSeconds > 0)
+            {
+                ReleaseTurnGateReference(key, gate);
+                throw new CodexTurnGateTimeoutException(BuildTurnSlotTimeoutMessage(timeoutSeconds), ex);
+            }
+            catch
+            {
+                ReleaseTurnGateReference(key, gate);
+                throw;
+            }
+        }
+
+        private static CodexTurnGate RetainTurnGate(string key)
+        {
+            key = string.IsNullOrEmpty(key) ? string.Empty : key;
+
+            lock (TurnGateLock)
+            {
+                if (!TurnGates.TryGetValue(key, out var gate))
+                {
+                    gate = new CodexTurnGate();
+                    TurnGates[key] = gate;
+                }
+
+                gate.RefCount++;
+                return gate;
+            }
+        }
+
+        private static void ReleaseTurnGateReference(string key, CodexTurnGate gate)
+        {
+            if (gate == null) return;
+
+            var shouldDispose = false;
+            lock (TurnGateLock)
+            {
+                gate.RefCount--;
+                if (gate.RefCount <= 0
+                    && TurnGates.TryGetValue(key ?? string.Empty, out var current)
+                    && ReferenceEquals(current, gate))
+                {
+                    TurnGates.Remove(key ?? string.Empty);
+                    shouldDispose = true;
+                }
+            }
+
+            if (shouldDispose)
+            {
+                gate.Semaphore.Dispose();
+            }
+        }
+
+        private static string BuildTurnGateKey(
+            string baseUrl,
+            ModelSpec model,
+            Dictionary<string, object> additionalBody,
+            string fallbackCwd)
+        {
+            return string.Join(
+                "\n",
+                NormalizeGateValue(baseUrl),
+                NormalizeGateValue(ResolveEffectiveCwd(additionalBody, fallbackCwd)),
+                NormalizeGateValue(ResolveEffectiveModelId(model, additionalBody)));
+        }
+
+        private static string ResolveEffectiveCwd(Dictionary<string, object> additionalBody, string fallbackCwd)
+        {
+            var turn = TryGetDictionary(additionalBody, "turn");
+            var cwd = TryGetString(turn, "cwd")
+                      ?? TryGetString(additionalBody, "cwd")
+                      ?? fallbackCwd
+                      ?? ResolveUnityProjectRoot();
+
+            return NormalizeComparablePath(cwd, null) ?? string.Empty;
+        }
+
+        private static string ResolveEffectiveModelId(ModelSpec model, Dictionary<string, object> additionalBody)
+        {
+            var modelValue = TryGetTurnOption(additionalBody, "model");
+            var normalized = NormalizeCodexModel(modelValue);
+            if (normalized != null)
+            {
+                var text = normalized.ToString();
+                if (!string.IsNullOrWhiteSpace(text)) return text;
+            }
+
+            return string.IsNullOrWhiteSpace(model?.ModelId)
+                ? "app-server-default"
+                : model.ModelId;
+        }
+
+        private static object TryGetTurnOption(Dictionary<string, object> additionalBody, string key)
+        {
+            if (additionalBody == null || string.IsNullOrEmpty(key)) return null;
+
+            var turn = TryGetDictionary(additionalBody, "turn");
+            if (turn != null && turn.TryGetValue(key, out var value) && !IsNullLike(value)) return value;
+            if (additionalBody.TryGetValue(key, out value) && !IsNullLike(value)) return value;
+            return null;
+        }
+
+        private static string NormalizeGateValue(string value)
+            => string.IsNullOrWhiteSpace(value)
+                ? string.Empty
+                : value.Trim().TrimEnd('/', '\\');
 
         private static bool IsRootedPath(string value)
         {
@@ -1021,6 +1192,9 @@ namespace UnityLLMAPI.Chat
             if (value is JValue jvalue) return jvalue.Type == JTokenType.Null ? null : jvalue.ToString();
             return value.ToString();
         }
+
+        private static bool IsNullLike(object value)
+            => value == null || (value is JValue jvalue && jvalue.Type == JTokenType.Null);
 
         private static object ParseSchema(string jsonSchema)
         {
@@ -1462,7 +1636,7 @@ namespace UnityLLMAPI.Chat
                     {
                         state.IsTurnCompleted = true;
                         state.TurnSucceeded = IsSuccessfulTurn(parameters);
-                        state.ErrorMessage = parameters?["turn"]?["error"]?.ToString(Formatting.None);
+                        state.ErrorMessage = ExtractTurnCompletedErrorMessage(parameters);
                     }
                     break;
                 case "error":
@@ -1517,7 +1691,10 @@ namespace UnityLLMAPI.Chat
                 case "turn_aborted":
                     state.IsTurnCompleted = true;
                     state.TurnSucceeded = false;
-                    state.ErrorMessage = evt["reason"]?.ToString() ?? "Codex App Server turn was aborted.";
+                    state.ErrorMessage = BuildTurnFailureMessage(
+                        "aborted",
+                        evt["message"]?.ToString() ?? evt["error"]?.ToString(Formatting.None),
+                        evt["reason"]?.ToString());
                     break;
                 case "stream_error":
                 case "error":
@@ -1547,13 +1724,54 @@ namespace UnityLLMAPI.Chat
             return string.IsNullOrEmpty(turnId) || turnId == state.TurnId;
         }
 
+        private static string ExtractTurnCompletedErrorMessage(JObject parameters)
+        {
+            var turn = parameters?["turn"] as JObject;
+            var status = turn?["status"]?.ToString()
+                         ?? parameters?["status"]?.ToString();
+            var error = TokenToCompactString(turn?["error"] ?? parameters?["error"]);
+            var reason = turn?["reason"]?.ToString()
+                         ?? parameters?["reason"]?.ToString();
+
+            if (IsSuccessfulTurn(parameters))
+            {
+                return string.IsNullOrWhiteSpace(error) ? null : error;
+            }
+
+            return BuildTurnFailureMessage(status, error, reason);
+        }
+
+        private static string BuildTurnFailureMessage(string status, string error, string reason)
+        {
+            if (!string.IsNullOrWhiteSpace(error)) return error;
+
+            if (!string.IsNullOrWhiteSpace(reason))
+            {
+                return string.IsNullOrWhiteSpace(status)
+                    ? "Codex App Server turn failed: " + reason
+                    : "Codex App Server turn " + status + ": " + reason;
+            }
+
+            return string.IsNullOrWhiteSpace(status)
+                ? "Codex App Server turn failed."
+                : "Codex App Server turn failed with status: " + status + ".";
+        }
+
+        private static string TokenToCompactString(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null) return null;
+            return token.Type == JTokenType.String ? token.ToString() : token.ToString(Formatting.None);
+        }
+
         private static bool IsSuccessfulTurn(JObject parameters)
         {
             var status = parameters?["turn"]?["status"]?.ToString()
                          ?? parameters?["status"]?.ToString();
             return string.IsNullOrEmpty(status)
                    || string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(status, "finished", StringComparison.OrdinalIgnoreCase);
+                   || string.Equals(status, "finished", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(status, "success", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsAgentMessageItem(JObject item)
@@ -1976,6 +2194,34 @@ namespace UnityLLMAPI.Chat
             };
         }
 
+        private sealed class CodexTurnGate
+        {
+            public readonly SemaphoreSlim Semaphore = new SemaphoreSlim(1, 1);
+            public int RefCount;
+        }
+
+        private sealed class CodexTurnGateLease : IDisposable
+        {
+            private readonly string key;
+            private readonly CodexTurnGate gate;
+            private bool disposed;
+
+            public CodexTurnGateLease(string key, CodexTurnGate gate)
+            {
+                this.key = key;
+                this.gate = gate;
+            }
+
+            public void Dispose()
+            {
+                if (disposed) return;
+
+                disposed = true;
+                gate.Semaphore.Release();
+                ReleaseTurnGateReference(key, gate);
+            }
+        }
+
         private sealed class CodexImageOutputTarget
         {
             public string ProjectRoot { get; set; }
@@ -2007,6 +2253,14 @@ namespace UnityLLMAPI.Chat
         private sealed class CodexAppServerConnectionException : Exception
         {
             public CodexAppServerConnectionException(string message, Exception innerException)
+                : base(message, innerException)
+            {
+            }
+        }
+
+        private sealed class CodexTurnGateTimeoutException : Exception
+        {
+            public CodexTurnGateTimeoutException(string message, Exception innerException)
                 : base(message, innerException)
             {
             }
@@ -2104,11 +2358,29 @@ namespace UnityLLMAPI.Chat
                 {
                     IsSuccess = success,
                     StatusCode = success ? 200 : 0,
-                    ErrorMessage = success ? null : errorMessage,
+                    ErrorMessage = success ? null : BuildCodexTurnErrorMessage(errorMessage),
                     RawEventLog = rawEvents.ToString(),
                     Content = completedAgentMessage ?? content.ToString()
                 };
             }
+        }
+
+        private static string BuildCodexTurnErrorMessage(string errorMessage)
+        {
+            if (string.IsNullOrWhiteSpace(errorMessage))
+            {
+                return "Codex App Server turn failed.";
+            }
+
+            if (errorMessage.IndexOf("Missing bearer or basic authentication", StringComparison.OrdinalIgnoreCase) >= 0
+                || errorMessage.IndexOf("401 Unauthorized", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return errorMessage
+                       + "\nCodex App Server is reachable, but the Codex CLI process did not send OpenAI authentication. "
+                       + "Stop the managed server from Tools > UnityLLMAPI > Codex App Server, run Sync Auth/Config or Run codex login for the isolated CODEX_HOME, then start the server again.";
+            }
+
+            return errorMessage;
         }
 
         private sealed class CodexTurnResult

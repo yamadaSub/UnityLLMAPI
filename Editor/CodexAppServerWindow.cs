@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net.WebSockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -18,6 +19,8 @@ namespace UnityLLMAPI.Editor
     public class CodexAppServerWindow : EditorWindow
     {
         private string codexCliPath;
+        private string codexHomePath;
+        private bool customCodexHome;
         private string host;
         private int port;
         private bool busy;
@@ -108,6 +111,22 @@ namespace UnityLLMAPI.Editor
                 {
                     GUILayout.Space(86);
                     EditorGUILayout.LabelField("Resolved: " + CodexAppServerEditorController.ResolveCodexCliPath(codexCliPath), EditorStyles.miniLabel);
+                }
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    EditorGUILayout.LabelField("CODEX_HOME", GUILayout.Width(82));
+                    EditorGUILayout.SelectableLabel(codexHomePath, EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+                }
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    GUILayout.Space(86);
+                        EditorGUILayout.LabelField(
+                        customCodexHome
+                            ? "Custom isolated Codex home. History stays separate from the desktop app."
+                            : "Project-isolated Codex home. Auth/config sync from the default CLI profile; history stays separate.",
+                        EditorStyles.miniLabel);
                 }
 
                 using (new EditorGUILayout.HorizontalScope())
@@ -203,6 +222,11 @@ namespace UnityLLMAPI.Editor
                             RunOperation("Check connection", CheckConnectionAsync);
                         }
 
+                        if (GUILayout.Button("Sync Auth/Config", GUILayout.Height(24), GUILayout.MinWidth(130)))
+                        {
+                            RunOperation("Sync Codex profile", CodexAppServerEditorController.SyncDefaultProfileAsync);
+                        }
+
                         if (GUILayout.Button("Run codex login", GUILayout.Height(24), GUILayout.MinWidth(120)))
                         {
                             RunOperation("Run codex login", CodexAppServerEditorController.RunLoginAsync);
@@ -218,6 +242,11 @@ namespace UnityLLMAPI.Editor
             {
                 DrawSectionTitle("Logs");
                 GUILayout.FlexibleSpace();
+                if (GUILayout.Button("Copy", GUILayout.Width(70), GUILayout.Height(20)))
+                {
+                    EditorGUIUtility.systemCopyBuffer = CodexAppServerEditorController.GetLogText();
+                }
+
                 if (GUILayout.Button("Clear", GUILayout.Width(70), GUILayout.Height(20)))
                 {
                     CodexAppServerEditorController.ClearLog();
@@ -227,10 +256,12 @@ namespace UnityLLMAPI.Editor
             using (new EditorGUILayout.VerticalScope("box"))
             {
                 logScroll = EditorGUILayout.BeginScrollView(logScroll, GUILayout.MinHeight(120), GUILayout.ExpandHeight(true));
-                foreach (var line in CodexAppServerEditorController.GetLogSnapshot())
+                var logText = CodexAppServerEditorController.GetLogText();
+                var style = new GUIStyle(EditorStyles.textArea)
                 {
-                    EditorGUILayout.LabelField(line, EditorStyles.wordWrappedMiniLabel);
-                }
+                    wordWrap = true
+                };
+                EditorGUILayout.TextArea(string.IsNullOrEmpty(logText) ? "(no logs)" : logText, style, GUILayout.ExpandHeight(true));
                 EditorGUILayout.EndScrollView();
             }
         }
@@ -394,6 +425,8 @@ namespace UnityLLMAPI.Editor
         {
             var settings = CodexAppServerEditorController.LoadSettings();
             codexCliPath = settings.CodexCliPath;
+            codexHomePath = settings.CodexHomePath;
+            customCodexHome = settings.UseCustomCodexHome;
             host = settings.Host;
             port = settings.Port;
         }
@@ -466,6 +499,7 @@ namespace UnityLLMAPI.Editor
     {
         private const string PrefBaseUrl = "UnityLLMAPI.CODEX_APP_SERVER_BASE_URL";
         private const string PrefCliPath = "UnityLLMAPI.CODEX_CLI_PATH";
+        private const string PrefCodexHomePath = "UnityLLMAPI.CODEX_APP_SERVER_CODEX_HOME";
         private const string PrefHost = "UnityLLMAPI.CODEX_APP_SERVER_HOST";
         private const string PrefPort = "UnityLLMAPI.CODEX_APP_SERVER_PORT";
         private const string DefaultCliPath = "codex";
@@ -476,6 +510,7 @@ namespace UnityLLMAPI.Editor
         private static readonly object LogLock = new object();
         private static readonly List<string> LogLines = new List<string>();
         private static readonly SemaphoreSlim StartStopLock = new SemaphoreSlim(1, 1);
+        private static readonly Regex AnsiEscapePattern = new Regex(@"\x1B\[[0-?]*[ -/]*[@-~]", RegexOptions.Compiled);
         private static readonly SynchronizationContext MainContext;
         private static Process managedProcess;
 
@@ -521,6 +556,8 @@ namespace UnityLLMAPI.Editor
             return new CodexAppServerSettings
             {
                 CodexCliPath = EditorUserSettings.GetConfigValue(PrefCliPath) ?? DefaultCliPath,
+                CodexHomePath = ResolveCodexHomePath(),
+                UseCustomCodexHome = HasExplicitCodexHomePath(),
                 Host = string.IsNullOrWhiteSpace(host) ? DefaultHost : host.Trim(),
                 Port = Mathf.Clamp(port, 1, 65535)
             };
@@ -545,6 +582,60 @@ namespace UnityLLMAPI.Editor
         {
             var normalizedHost = string.IsNullOrWhiteSpace(serverHost) ? DefaultHost : serverHost.Trim();
             return "ws://" + normalizedHost + ":" + Mathf.Clamp(serverPort, 1, 65535);
+        }
+
+        public static string ResolveCodexHomePath()
+        {
+            var explicitPath = ResolveExplicitCodexHomePath();
+            return string.IsNullOrWhiteSpace(explicitPath) ? ResolveProjectIsolatedCodexHomePath() : explicitPath;
+        }
+
+        private static bool HasExplicitCodexHomePath()
+        {
+            return !string.IsNullOrWhiteSpace(EditorUserSettings.GetConfigValue(PrefCodexHomePath));
+        }
+
+        private static string ResolveExplicitCodexHomePath()
+        {
+            var configured = EditorUserSettings.GetConfigValue(PrefCodexHomePath);
+            return string.IsNullOrWhiteSpace(configured)
+                ? null
+                : Path.GetFullPath(Environment.ExpandEnvironmentVariables(configured.Trim().Trim('"')));
+        }
+
+        private static string ResolveProjectIsolatedCodexHomePath()
+        {
+            var baseDirectory = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(baseDirectory))
+            {
+                baseDirectory = Application.persistentDataPath;
+            }
+
+            return Path.Combine(
+                baseDirectory,
+                "UnityLLMAPI",
+                "CodexAppServer",
+                BuildProjectCodexHomeKey());
+        }
+
+        private static string ResolveDefaultCodexHomePath()
+        {
+            var envCodexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
+            if (!string.IsNullOrWhiteSpace(envCodexHome))
+            {
+                return Path.GetFullPath(Environment.ExpandEnvironmentVariables(envCodexHome.Trim().Trim('"')));
+            }
+
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrWhiteSpace(userProfile))
+            {
+                return Path.Combine(userProfile, ".codex");
+            }
+
+            var localData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return Path.Combine(
+                string.IsNullOrWhiteSpace(localData) ? Application.persistentDataPath : localData,
+                ".codex");
         }
 
         public static string ManagedProcessStatus
@@ -601,6 +692,7 @@ namespace UnityLLMAPI.Editor
 
         public static async Task RefreshLoginStatusAsync(CancellationToken cancellationToken)
         {
+            SyncDefaultProfile(false);
             var result = await RunCodexCommandAsync(new[] { "login", "status" }, 6000, cancellationToken);
             var text = FirstNonEmptyLine(result.Stdout) ?? FirstNonEmptyLine(result.Stderr) ?? "(no output)";
             LoginStatus = result.ExitCode == 0 ? text : "Failed: " + text;
@@ -610,12 +702,20 @@ namespace UnityLLMAPI.Editor
 
         public static async Task RunLoginAsync(CancellationToken cancellationToken)
         {
+            SyncDefaultProfile(false);
             AppendLog("Running codex login. Complete the browser login flow if prompted.");
             var result = await RunCodexCommandAsync(new[] { "login" }, 120000, cancellationToken);
             var text = FirstNonEmptyLine(result.Stdout) ?? FirstNonEmptyLine(result.Stderr) ?? "(no output)";
             LastStatus = result.ExitCode == 0 ? "codex login completed." : "codex login failed: " + text;
             AppendLog("codex login exit=" + result.ExitCode + ": " + text);
             await RefreshLoginStatusAsync(cancellationToken);
+        }
+
+        public static Task SyncDefaultProfileAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            SyncDefaultProfile(true);
+            return Task.CompletedTask;
         }
 
         public static async Task RefreshConnectionStatusAsync(string url, CancellationToken cancellationToken)
@@ -672,6 +772,7 @@ namespace UnityLLMAPI.Editor
                 }
 
                 SaveUrlFromNormalizedUrl(normalizedUrl);
+                SyncDefaultProfile(false);
                 StartManagedProcess(normalizedUrl);
             }
             finally
@@ -746,6 +847,7 @@ namespace UnityLLMAPI.Editor
 
         public static void AppendLog(string message)
         {
+            message = SanitizeLogLine(message);
             if (string.IsNullOrWhiteSpace(message))
             {
                 return;
@@ -763,11 +865,11 @@ namespace UnityLLMAPI.Editor
             NotifyChanged();
         }
 
-        public static IReadOnlyList<string> GetLogSnapshot()
+        public static string GetLogText()
         {
             lock (LogLock)
             {
-                return LogLines.ToArray();
+                return string.Join(Environment.NewLine, LogLines.ToArray());
             }
         }
 
@@ -822,7 +924,8 @@ namespace UnityLLMAPI.Editor
             var startInfo = CreateCodexStartInfo(
                 settings.CodexCliPath,
                 new[] { "app-server", "--listen", normalizedUrl },
-                Directory.GetCurrentDirectory());
+                Directory.GetCurrentDirectory(),
+                settings.CodexHomePath);
 
             var process = new Process
             {
@@ -863,6 +966,7 @@ namespace UnityLLMAPI.Editor
             };
 
             AppendLog("Starting: " + startInfo.FileName + " " + startInfo.Arguments);
+            AppendLog("Using isolated CODEX_HOME: " + settings.CodexHomePath);
             if (!process.Start())
             {
                 throw new InvalidOperationException("Failed to start Codex CLI process.");
@@ -877,11 +981,16 @@ namespace UnityLLMAPI.Editor
         private static async Task<CommandResult> RunCodexCommandAsync(string[] arguments, int timeoutMilliseconds, CancellationToken cancellationToken)
         {
             var settings = LoadSettings();
-            var startInfo = CreateCodexStartInfo(settings.CodexCliPath, arguments, Directory.GetCurrentDirectory());
+            var startInfo = CreateCodexStartInfo(
+                settings.CodexCliPath,
+                arguments,
+                Directory.GetCurrentDirectory(),
+                settings.CodexHomePath);
 
             using (var process = new Process { StartInfo = startInfo })
             {
                 AppendLog("Running: " + startInfo.FileName + " " + startInfo.Arguments);
+                AppendLog("Using isolated CODEX_HOME: " + settings.CodexHomePath);
                 var stdout = new StringBuilder();
                 var stderr = new StringBuilder();
                 var outputLock = new object();
@@ -965,7 +1074,11 @@ namespace UnityLLMAPI.Editor
             }
         }
 
-        private static ProcessStartInfo CreateCodexStartInfo(string configuredCliPath, string[] arguments, string workingDirectory)
+        private static ProcessStartInfo CreateCodexStartInfo(
+            string configuredCliPath,
+            string[] arguments,
+            string workingDirectory,
+            string codexHomePath)
         {
             var resolvedCliPath = ResolveCodexCliPath(configuredCliPath);
             var fileName = resolvedCliPath;
@@ -980,7 +1093,7 @@ namespace UnityLLMAPI.Editor
                                (string.IsNullOrEmpty(cliArguments) ? string.Empty : " " + cliArguments);
             }
 
-            return new ProcessStartInfo
+            var startInfo = new ProcessStartInfo
             {
                 FileName = fileName,
                 Arguments = cliArguments,
@@ -990,6 +1103,99 @@ namespace UnityLLMAPI.Editor
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
+
+            ApplyCodexHome(startInfo, codexHomePath);
+            return startInfo;
+        }
+
+        private static void ApplyCodexHome(ProcessStartInfo startInfo, string codexHomePath)
+        {
+            if (startInfo == null || string.IsNullOrWhiteSpace(codexHomePath))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(codexHomePath);
+            startInfo.EnvironmentVariables["CODEX_HOME"] = codexHomePath;
+        }
+
+        private static void SyncDefaultProfile(bool force)
+        {
+            var settings = LoadSettings();
+            Directory.CreateDirectory(settings.CodexHomePath);
+
+            var sourceHome = ResolveDefaultCodexHomePath();
+            if (string.IsNullOrWhiteSpace(sourceHome) || AreSamePath(sourceHome, settings.CodexHomePath))
+            {
+                EnsureCurrentProjectTrusted(settings.CodexHomePath);
+                return;
+            }
+
+            CopyProfileFileIfAllowed(sourceHome, settings.CodexHomePath, "auth.json", force);
+            CopyProfileFileIfAllowed(sourceHome, settings.CodexHomePath, "config.toml", force);
+            EnsureCurrentProjectTrusted(settings.CodexHomePath);
+            AppendLog("Synced Codex auth/config into isolated CODEX_HOME from: " + sourceHome);
+        }
+
+        private static void CopyProfileFileIfAllowed(string sourceHome, string targetHome, string fileName, bool force)
+        {
+            var source = Path.Combine(sourceHome, fileName);
+            var target = Path.Combine(targetHome, fileName);
+            if (!File.Exists(source))
+            {
+                return;
+            }
+
+            if (!force && File.Exists(target))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(targetHome);
+            File.Copy(source, target, true);
+            AppendLog((force ? "Updated " : "Copied ") + fileName + " in isolated CODEX_HOME.");
+        }
+
+        private static void EnsureCurrentProjectTrusted(string codexHomePath)
+        {
+            if (string.IsNullOrWhiteSpace(codexHomePath))
+            {
+                return;
+            }
+
+            Directory.CreateDirectory(codexHomePath);
+            var configPath = Path.Combine(codexHomePath, "config.toml");
+            var projectRoot = NormalizeProjectConfigPath(Directory.GetCurrentDirectory());
+            var header = "[projects.'" + projectRoot.Replace("'", "\\'") + "']";
+            var config = File.Exists(configPath) ? File.ReadAllText(configPath, Encoding.UTF8) : string.Empty;
+            if (config.IndexOf(header, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return;
+            }
+
+            var builder = new StringBuilder(config);
+            if (builder.Length > 0 && !config.EndsWith("\n", StringComparison.Ordinal))
+            {
+                builder.AppendLine();
+            }
+
+            builder.AppendLine();
+            builder.AppendLine(header);
+            builder.AppendLine("trust_level = \"trusted\"");
+            File.WriteAllText(configPath, builder.ToString(), Encoding.UTF8);
+            AppendLog("Trusted current project in isolated CODEX_HOME config: " + projectRoot);
+        }
+
+        private static bool AreSamePath(string left, string right)
+        {
+            if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            {
+                return false;
+            }
+
+            var normalizedLeft = Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var normalizedRight = Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(normalizedLeft, normalizedRight, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void KillProcessTree(Process process)
@@ -1184,6 +1390,58 @@ namespace UnityLLMAPI.Editor
                    || value.Contains("\\");
         }
 
+        private static string BuildProjectCodexHomeKey()
+        {
+            var projectRoot = Path.GetFullPath(Directory.GetCurrentDirectory())
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var projectName = SanitizeFileName(Path.GetFileName(projectRoot));
+            var hash = StableHashHex(NormalizeHashInput(projectRoot));
+            return string.IsNullOrEmpty(projectName) ? hash : projectName + "-" + hash;
+        }
+
+        private static string NormalizeProjectConfigPath(string value)
+        {
+            return Path.GetFullPath(value)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .ToLowerInvariant();
+        }
+
+        private static string NormalizeHashInput(string value)
+            => (value ?? string.Empty).Replace('\\', '/').ToLowerInvariant();
+
+        private static string SanitizeFileName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "project";
+            }
+
+            var invalid = Path.GetInvalidFileNameChars();
+            var builder = new StringBuilder(value.Length);
+            foreach (var ch in value.Trim())
+            {
+                builder.Append(Array.IndexOf(invalid, ch) >= 0 ? '_' : ch);
+            }
+
+            var result = builder.ToString().Trim('.', ' ');
+            return string.IsNullOrEmpty(result) ? "project" : result;
+        }
+
+        private static string StableHashHex(string value)
+        {
+            unchecked
+            {
+                var hash = 2166136261u;
+                foreach (var ch in value ?? string.Empty)
+                {
+                    hash ^= ch;
+                    hash *= 16777619u;
+                }
+
+                return hash.ToString("x8");
+            }
+        }
+
         private static string ResolvePowerShellPath()
         {
             var systemPath = Environment.GetFolderPath(Environment.SpecialFolder.System);
@@ -1225,6 +1483,26 @@ namespace UnityLLMAPI.Editor
             }
 
             return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        }
+
+        private static string SanitizeLogLine(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return string.Empty;
+            }
+
+            var text = AnsiEscapePattern.Replace(message, string.Empty);
+            var builder = new StringBuilder(text.Length);
+            foreach (var ch in text)
+            {
+                if (ch == '\t' || ch == '\r' || ch == '\n' || !char.IsControl(ch))
+                {
+                    builder.Append(ch);
+                }
+            }
+
+            return builder.ToString().TrimEnd();
         }
 
         private static string FirstNonEmptyLine(string text)
@@ -1272,6 +1550,8 @@ namespace UnityLLMAPI.Editor
     internal sealed class CodexAppServerSettings
     {
         public string CodexCliPath;
+        public string CodexHomePath;
+        public bool UseCustomCodexHome;
         public string Host;
         public int Port;
         public string WebSocketUrl => CodexAppServerEditorController.BuildWebSocketUrl(Host, Port);
