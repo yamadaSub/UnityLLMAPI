@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using UnityLLMAPI.Schema;
 
 namespace UnityLLMAPI.Chat
 {
     internal static class MessagePayloadBuilder
     {
-        public static List<Dictionary<string, object>> BuildOpenAiMessages(List<Message> messages)
+        public static List<Dictionary<string, object>> BuildResponsesInput(List<Message> messages)
         {
             var result = new List<Dictionary<string, object>>();
             if (messages == null) return result;
@@ -19,35 +20,35 @@ namespace UnityLLMAPI.Chat
                     { "role", message.role.ToString().ToLowerInvariant() }
                 };
 
-                var parts = BuildOpenAiContentParts(message);
-                if (parts.Count > 0)
+                var messageParts = message.EnumerateParts().ToList();
+                if (messageParts.All(part => part.type == MessageContentType.Text))
                 {
-                    payload["content"] = parts;
+                    payload["content"] = string.Concat(messageParts.Select(part => part.text ?? string.Empty));
                 }
                 else
                 {
-                    payload["content"] = message.content ?? string.Empty;
+                    payload["content"] = BuildResponsesContent(messageParts);
                 }
-
                 result.Add(payload);
             }
 
             return result;
         }
 
-        public static List<Dictionary<string, object>> BuildOpenAiContentParts(Message message)
+        private static List<Dictionary<string, object>> BuildResponsesContent(IEnumerable<MessageContent> messageParts)
         {
             var parts = new List<Dictionary<string, object>>();
-            if (message == null) return parts;
+            if (messageParts == null) return parts;
 
-            foreach (var part in message.EnumerateParts())
+            foreach (var part in messageParts)
             {
+                if (part == null) continue;
                 switch (part.type)
                 {
                     case MessageContentType.Text:
                         parts.Add(new Dictionary<string, object>
                         {
-                            { "type", "text" },
+                            { "type", "input_text" },
                             { "text", part.text ?? string.Empty }
                         });
                         break;
@@ -57,8 +58,8 @@ namespace UnityLLMAPI.Chat
                             if (string.IsNullOrWhiteSpace(url)) break;
                             parts.Add(new Dictionary<string, object>
                             {
-                                { "type", "image_url" },
-                                { "image_url", new Dictionary<string, object> { { "url", url } } }
+                                { "type", "input_image" },
+                                { "image_url", url }
                             });
                             break;
                         }
@@ -68,8 +69,8 @@ namespace UnityLLMAPI.Chat
                             if (string.IsNullOrEmpty(dataUrl)) break;
                             parts.Add(new Dictionary<string, object>
                             {
-                                { "type", "image_url" },
-                                { "image_url", new Dictionary<string, object> { { "url", dataUrl } } }
+                                { "type", "input_image" },
+                                { "image_url", dataUrl }
                             });
                             break;
                         }
@@ -79,7 +80,64 @@ namespace UnityLLMAPI.Chat
             return parts;
         }
 
+        public static void AddResponsesFunctions(
+            Dictionary<string, object> body,
+            IReadOnlyList<IJsonSchema> functions)
+        {
+            if (body == null || functions == null || functions.Count == 0) return;
+            body["tools"] = functions.Select(BuildResponsesFunctionTool).ToList();
+            body["tool_choice"] = "auto";
+        }
+
+        public static Dictionary<string, object> BuildResponsesJsonSchemaFormat(
+            Dictionary<string, object> schemaDefinition)
+        {
+            var definition = schemaDefinition ?? new Dictionary<string, object>();
+            var name = definition.TryGetValue("name", out var nameValue)
+                ? nameValue?.ToString()
+                : "schema";
+            var schema = definition.TryGetValue("schema", out var schemaValue)
+                ? schemaValue
+                : definition;
+
+            return new Dictionary<string, object>
+            {
+                { "type", "json_schema" },
+                { "name", string.IsNullOrEmpty(name) ? "schema" : name },
+                { "strict", false },
+                { "schema", schema ?? new Dictionary<string, object> { { "type", "object" } } }
+            };
+        }
+
+        private static Dictionary<string, object> BuildResponsesFunctionTool(IJsonSchema functionSchema)
+        {
+            var schema = functionSchema?.GenerateJsonSchema() ?? new Dictionary<string, object>();
+            var name = schema.TryGetValue("name", out var nameValue)
+                ? nameValue?.ToString()
+                : functionSchema?.Name;
+            var description = schema.TryGetValue("description", out var descriptionValue)
+                ? descriptionValue?.ToString()
+                : string.Empty;
+
+            object parameters = null;
+            if (schema.TryGetValue("parameters", out var parametersValue)) parameters = parametersValue;
+            else if (schema.TryGetValue("schema", out var schemaValue)) parameters = schemaValue;
+
+            var tool = new Dictionary<string, object>
+            {
+                { "type", "function" },
+                { "name", name ?? string.Empty },
+                { "parameters", parameters ?? new Dictionary<string, object> { { "type", "object" } } },
+                { "strict", false }
+            };
+            if (!string.IsNullOrEmpty(description)) tool["description"] = description;
+            return tool;
+        }
+
         public static string BuildAnthropicSystem(List<Message> messages)
+            => BuildSystemInstructionText(messages);
+
+        public static string BuildSystemInstructionText(List<Message> messages)
         {
             if (messages == null || messages.Count == 0) return string.Empty;
 
@@ -199,69 +257,49 @@ namespace UnityLLMAPI.Chat
             return blocks;
         }
 
-        public static List<Dictionary<string, object>> BuildGeminiContents(List<Message> messages)
+        public static List<Dictionary<string, object>> BuildGeminiInteractionInput(List<Message> messages)
         {
-            var contents = new List<Dictionary<string, object>>();
-            if (messages == null) return contents;
+            var steps = new List<Dictionary<string, object>>();
+            if (messages == null) return steps;
 
             foreach (var message in messages)
             {
                 if (message == null || message.role == MessageRole.System) continue;
-                var parts = BuildGeminiParts(message);
-                if (parts.Count == 0)
+                var content = BuildGeminiInteractionContent(message);
+                if (content.Count == 0)
                 {
-                    parts.Add(new Dictionary<string, object> { { "text", message.content ?? string.Empty } });
+                    content.Add(new Dictionary<string, object>
+                    {
+                        { "type", "text" },
+                        { "text", message.content ?? string.Empty }
+                    });
                 }
 
-                var role = message.role == MessageRole.Assistant ? "model" : "user";
-                contents.Add(new Dictionary<string, object>
+                steps.Add(new Dictionary<string, object>
                 {
-                    { "role", role },
-                    { "parts", parts }
+                    { "type", message.role == MessageRole.Assistant ? "model_output" : "user_input" },
+                    { "content", content }
                 });
             }
 
-            return contents;
+            return steps;
         }
 
-        public static Dictionary<string, object> BuildGeminiSystemInstruction(List<Message> messages)
+        private static List<Dictionary<string, object>> BuildGeminiInteractionContent(Message message)
         {
-            if (messages == null || messages.Count == 0) return null;
-
-            var parts = new List<object>();
-            foreach (var message in messages)
-            {
-                if (message == null || message.role != MessageRole.System) continue;
-
-                foreach (var part in message.EnumerateParts())
-                {
-                    if (part?.type != MessageContentType.Text || string.IsNullOrWhiteSpace(part.text)) continue;
-                    parts.Add(new Dictionary<string, object>
-                    {
-                        { "text", part.text }
-                    });
-                }
-            }
-
-            if (parts.Count == 0) return null;
-
-            return new Dictionary<string, object>
-            {
-                { "parts", parts }
-            };
-        }
-
-        public static List<object> BuildGeminiParts(Message message)
-        {
-            var parts = new List<object>();
-            if (message == null) return parts;
+            var content = new List<Dictionary<string, object>>();
+            if (message == null) return content;
 
             foreach (var part in message.EnumerateParts())
             {
                 switch (part.type)
                 {
                     case MessageContentType.Text:
-                        parts.Add(new Dictionary<string, object> { { "text", part.text ?? string.Empty } });
+                        content.Add(new Dictionary<string, object>
+                        {
+                            { "type", "text" },
+                            { "text", part.text ?? string.Empty }
+                        });
                         break;
                     case MessageContentType.ImageUrl:
                         {
@@ -270,46 +308,39 @@ namespace UnityLLMAPI.Chat
 
                             if (TryParseDataUrl(url, out var mimeType, out var base64Data))
                             {
-                                parts.Add(new Dictionary<string, object>
+                                content.Add(new Dictionary<string, object>
                                 {
-                                    {
-                                        "inline_data", new Dictionary<string, object>
-                                        {
-                                            { "mime_type", !string.IsNullOrEmpty(mimeType) ? mimeType : (part.mimeType ?? "image/png") },
-                                            { "data", base64Data }
-                                        }
-                                    }
+                                    { "type", "image" },
+                                    { "data", base64Data },
+                                    { "mime_type", !string.IsNullOrEmpty(mimeType) ? mimeType : (part.mimeType ?? "image/png") }
                                 });
                                 break;
                             }
 
-                            var fileData = new Dictionary<string, object> { { "file_uri", url } };
-                            if (!string.IsNullOrEmpty(part.mimeType))
+                            var image = new Dictionary<string, object>
                             {
-                                fileData["mime_type"] = part.mimeType;
-                            }
-                            parts.Add(new Dictionary<string, object> { { "file_data", fileData } });
+                                { "type", "image" },
+                                { "uri", url }
+                            };
+                            if (!string.IsNullOrEmpty(part.mimeType)) image["mime_type"] = part.mimeType;
+                            content.Add(image);
                             break;
                         }
                     case MessageContentType.ImageData:
                         {
                             if (!part.HasData) break;
-                            parts.Add(new Dictionary<string, object>
+                            content.Add(new Dictionary<string, object>
                             {
-                                {
-                                    "inline_data", new Dictionary<string, object>
-                                    {
-                                        { "mime_type", string.IsNullOrEmpty(part.mimeType) ? "image/png" : part.mimeType },
-                                        { "data", Convert.ToBase64String(part.data) }
-                                    }
-                                }
+                                { "type", "image" },
+                                { "data", Convert.ToBase64String(part.data) },
+                                { "mime_type", string.IsNullOrEmpty(part.mimeType) ? "image/png" : part.mimeType }
                             });
                             break;
                         }
                 }
             }
 
-            return parts;
+            return content;
         }
 
         public static object SanitizeGeminiParameters(object parameters)

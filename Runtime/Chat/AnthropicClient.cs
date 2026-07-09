@@ -180,7 +180,7 @@ namespace UnityLLMAPI.Chat
             {
                 { "name", name ?? string.Empty },
                 { "description", description ?? string.Empty },
-                { "input_schema", inputSchema ?? new Dictionary<string, object> { { "type", "object" } } },
+                { "input_schema", NormalizeStrictInputSchema(inputSchema) },
                 { "strict", true }
             };
         }
@@ -193,7 +193,7 @@ namespace UnityLLMAPI.Chat
                 {
                     { "name", StructuredOutputToolName },
                     { "description", "Return the final answer as JSON that matches the schema exactly." },
-                    { "input_schema", schema ?? new Dictionary<string, object> { { "type", "object" } } },
+                    { "input_schema", NormalizeStrictInputSchema(schema) },
                     { "strict", true }
                 }
             };
@@ -203,6 +203,61 @@ namespace UnityLLMAPI.Chat
                 { "type", "tool" },
                 { "name", StructuredOutputToolName }
             };
+        }
+
+        private static Dictionary<string, object> NormalizeStrictInputSchema(object schema)
+        {
+            var token = schema == null
+                ? JObject.FromObject(new Dictionary<string, object> { { "type", "object" } })
+                : (schema as JToken ?? JToken.FromObject(schema)).DeepClone();
+
+            AddStrictObjectSchemaFields(token);
+            return token.ToObject<Dictionary<string, object>>()
+                   ?? new Dictionary<string, object>
+                   {
+                       { "type", "object" },
+                       { "additionalProperties", false }
+                   };
+        }
+
+        private static void AddStrictObjectSchemaFields(JToken token)
+        {
+            if (token is JObject obj)
+            {
+                if (IsObjectSchema(obj))
+                {
+                    obj["additionalProperties"] = false;
+                }
+
+                foreach (var property in obj.Properties().ToList())
+                {
+                    AddStrictObjectSchemaFields(property.Value);
+                }
+            }
+            else if (token is JArray array)
+            {
+                foreach (var item in array)
+                {
+                    AddStrictObjectSchemaFields(item);
+                }
+            }
+        }
+
+        private static bool IsObjectSchema(JObject obj)
+        {
+            var type = obj["type"];
+            if (type == null)
+            {
+                return obj["properties"] is JObject;
+            }
+
+            if (type.Type == JTokenType.String)
+            {
+                return type.ToString() == "object";
+            }
+
+            return type is JArray array && array.Any(item =>
+                item.Type == JTokenType.String && item.ToString() == "object");
         }
 
         private static void TryConsumeAnthropicStreamEvent(

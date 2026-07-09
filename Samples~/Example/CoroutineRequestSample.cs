@@ -6,7 +6,7 @@ using UnityLLMAPI.Chat;
 
 public class CoroutineRequestSample : MonoBehaviour
 {
-    public AIModelType model = AIModelType.Gemini25Flash;
+    public AIModelType model = AIModelType.Gemini35Flash;
 
     [TextArea]
     public string prompt = "Create a compact patrol plan for a stealth game enemy.";

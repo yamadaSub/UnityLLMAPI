@@ -62,12 +62,41 @@ namespace UnityLLMAPI.Chat
 
         private static string ExtractOpenAiContent(JObject body)
         {
+            var output = body?["output"] as JArray;
+            if (output != null)
+            {
+                var texts = output
+                    .OfType<JObject>()
+                    .Where(item => (item["type"]?.ToString() ?? string.Empty) == "message")
+                    .SelectMany(item => (item["content"] as JArray)?.OfType<JObject>()
+                        ?? Enumerable.Empty<JObject>())
+                    .Where(item => (item["type"]?.ToString() ?? string.Empty) == "output_text")
+                    .Select(item => item["text"]?.ToString())
+                    .Where(text => !string.IsNullOrEmpty(text))
+                    .ToList();
+
+                if (texts.Count > 0) return string.Concat(texts);
+            }
+
             return body?["choices"]?[0]?["message"]?["content"]?.ToString();
         }
 
         private static string ExtractGeminiContent(JObject body)
         {
-            return ConcatenateTextParts(body?["candidates"]?[0]?["content"]?["parts"] as JArray);
+            var steps = body?["steps"] as JArray;
+            if (steps == null) return null;
+
+            var texts = steps
+                .OfType<JObject>()
+                .Where(step => (step["type"]?.ToString() ?? string.Empty) == "model_output")
+                .SelectMany(step => (step["content"] as JArray)?.OfType<JObject>()
+                    ?? Enumerable.Empty<JObject>())
+                .Where(content => (content["type"]?.ToString() ?? string.Empty) == "text")
+                .Select(content => content["text"]?.ToString())
+                .Where(text => !string.IsNullOrEmpty(text))
+                .ToList();
+
+            return texts.Count == 0 ? null : string.Concat(texts);
         }
 
         private static string ExtractAnthropicContent(JObject body)
@@ -104,6 +133,21 @@ namespace UnityLLMAPI.Chat
 
         private static IJsonSchema ExtractOpenAiFunction(JObject body, IReadOnlyList<IJsonSchema> functions)
         {
+            var output = body?["output"] as JArray;
+            if (output != null)
+            {
+                foreach (var item in output.OfType<JObject>())
+                {
+                    if ((item["type"]?.ToString() ?? string.Empty) != "function_call") continue;
+
+                    var parsed = ParseFunctionArguments(
+                        functions,
+                        item["name"]?.ToString() ?? string.Empty,
+                        item["arguments"]?.ToString() ?? "{}");
+                    if (parsed != null) return parsed;
+                }
+            }
+
             var message = body?["choices"]?[0]?["message"] as JObject;
             if (message == null) return null;
 
@@ -154,16 +198,15 @@ namespace UnityLLMAPI.Chat
 
         private static IJsonSchema ExtractGeminiFunction(JObject body, IReadOnlyList<IJsonSchema> functions)
         {
-            var parts = body?["candidates"]?[0]?["content"]?["parts"] as JArray;
-            if (parts == null) return null;
+            var steps = body?["steps"] as JArray;
+            if (steps == null) return null;
 
-            foreach (var part in parts)
+            foreach (var step in steps.OfType<JObject>())
             {
-                var functionCall = part?["functionCall"] as JObject;
-                if (functionCall == null) continue;
+                if ((step["type"]?.ToString() ?? string.Empty) != "function_call") continue;
 
-                var name = functionCall["name"]?.ToString() ?? string.Empty;
-                var args = functionCall["args"] as JObject;
+                var name = step["name"]?.ToString() ?? string.Empty;
+                var args = step["arguments"] as JObject;
                 var target = functions.FirstOrDefault(func => func.Name == name);
                 if (target == null) continue;
 
@@ -214,17 +257,5 @@ namespace UnityLLMAPI.Chat
             return null;
         }
 
-        private static string ConcatenateTextParts(JArray parts)
-        {
-            if (parts == null) return null;
-
-            var texts = parts
-                .OfType<JObject>()
-                .Select(part => part["text"]?.ToString())
-                .Where(text => !string.IsNullOrEmpty(text))
-                .ToList();
-
-            return texts.Count == 0 ? null : string.Concat(texts);
-        }
     }
 }

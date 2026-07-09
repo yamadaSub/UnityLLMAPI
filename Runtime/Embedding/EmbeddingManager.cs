@@ -15,9 +15,6 @@ namespace UnityLLMAPI.Embedding
     {
         OpenAISmall,
         OpenAILarge,
-        Gemini01,
-        Gemini01_1536,
-        Gemini01_768,
         GeminiEmbedding2
     }
 
@@ -316,23 +313,11 @@ namespace UnityLLMAPI.Embedding
 
         private static EmbeddingModelSpec GetModelSpec(EmbeddingModelType model, int? outputDimensionality)
         {
-            var defaultDimensions = model switch
-            {
-                EmbeddingModelType.Gemini01_1536 => 1536,
-                EmbeddingModelType.Gemini01_768 => 768,
-                _ => (int?)null
-            };
-
-            var resolvedDimensions = outputDimensionality ?? defaultDimensions;
-
             return model switch
             {
-                EmbeddingModelType.OpenAISmall => new EmbeddingModelSpec(EmbeddingProviderType.OpenAI, "text-embedding-3-small", resolvedDimensions),
-                EmbeddingModelType.OpenAILarge => new EmbeddingModelSpec(EmbeddingProviderType.OpenAI, "text-embedding-3-large", resolvedDimensions),
-                EmbeddingModelType.Gemini01 => new EmbeddingModelSpec(EmbeddingProviderType.Gemini, "gemini-embedding-001", resolvedDimensions),
-                EmbeddingModelType.Gemini01_1536 => new EmbeddingModelSpec(EmbeddingProviderType.Gemini, "gemini-embedding-001", resolvedDimensions),
-                EmbeddingModelType.Gemini01_768 => new EmbeddingModelSpec(EmbeddingProviderType.Gemini, "gemini-embedding-001", resolvedDimensions),
-                EmbeddingModelType.GeminiEmbedding2 => new EmbeddingModelSpec(EmbeddingProviderType.Gemini, "gemini-embedding-2-preview", resolvedDimensions),
+                EmbeddingModelType.OpenAISmall => new EmbeddingModelSpec(EmbeddingProviderType.OpenAI, "text-embedding-3-small", outputDimensionality),
+                EmbeddingModelType.OpenAILarge => new EmbeddingModelSpec(EmbeddingProviderType.OpenAI, "text-embedding-3-large", outputDimensionality),
+                EmbeddingModelType.GeminiEmbedding2 => new EmbeddingModelSpec(EmbeddingProviderType.Gemini, "gemini-embedding-2", outputDimensionality),
                 _ => throw new NotSupportedException($"Unsupported embedding model: {model}")
             };
         }

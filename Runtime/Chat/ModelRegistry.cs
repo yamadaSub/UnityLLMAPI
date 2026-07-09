@@ -33,6 +33,7 @@ namespace UnityLLMAPI.Chat
         public string ModelId { get; set; }
         public AICapabilities Capabilities { get; set; }
         public int MaxContextTokens { get; set; }
+        public string ReasoningEffort { get; set; }
     }
 
     // AIModelType -> ModelSpec を一元管理するレジストリ
@@ -40,20 +41,6 @@ namespace UnityLLMAPI.Chat
     {
         private static readonly Dictionary<AIModelType, ModelSpec> Models = new Dictionary<AIModelType, ModelSpec>
         {
-            {
-                AIModelType.GPT4o,
-                new ModelSpec
-                {
-                    ModelType = AIModelType.GPT4o,
-                    Provider = AIProvider.OpenAI,
-                    ModelId = "gpt-4o",
-                    Capabilities = AICapabilities.TextChat
-                                   | AICapabilities.Vision
-                                   | AICapabilities.JsonSchema
-                                   | AICapabilities.FunctionCalling,
-                    MaxContextTokens = 128000,
-                }
-            },
             {
                 AIModelType.GPT5,
                 new ModelSpec
@@ -111,6 +98,48 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
+                AIModelType.GPT5_6,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.GPT5_6,
+                    Provider = AIProvider.OpenAI,
+                    ModelId = "gpt-5.6",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1050000,
+                }
+            },
+            {
+                AIModelType.GPT5_6Terra,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.GPT5_6Terra,
+                    Provider = AIProvider.OpenAI,
+                    ModelId = "gpt-5.6-terra",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1050000,
+                }
+            },
+            {
+                AIModelType.GPT5_6Luna,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.GPT5_6Luna,
+                    Provider = AIProvider.OpenAI,
+                    ModelId = "gpt-5.6-luna",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1050000,
+                }
+            },
+            {
                 AIModelType.GPT5_5AppServer,
                 new ModelSpec
                 {
@@ -140,62 +169,23 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
-                AIModelType.Grok2,
-                new ModelSpec
-                {
-                    ModelType = AIModelType.Grok2,
-                    Provider = AIProvider.Grok,
-                    ModelId = "grok-2-latest",
-                    Capabilities = AICapabilities.TextChat
-                                   | AICapabilities.JsonSchema
-                                   | AICapabilities.FunctionCalling,
-                    MaxContextTokens = 131072,
-                }
-            },
-            {
-                AIModelType.Grok3,
-                new ModelSpec
-                {
-                    ModelType = AIModelType.Grok3,
-                    Provider = AIProvider.Grok,
-                    ModelId = "grok-3-latest",
-                    Capabilities = AICapabilities.TextChat
-                                   | AICapabilities.JsonSchema
-                                   | AICapabilities.FunctionCalling,
-                    MaxContextTokens = 131072,
-                }
-            },
-            {
-                AIModelType.Grok4_1,
-                new ModelSpec
-                {
-                    ModelType = AIModelType.Grok4_1,
-                    Provider = AIProvider.Grok,
-                    ModelId = "grok-4-1-fast-non-reasoning",
-                    Capabilities = AICapabilities.TextChat
-                                   | AICapabilities.JsonSchema
-                                   | AICapabilities.FunctionCalling,
-                    MaxContextTokens = 2000000,
-                }
-            },
-            {
-                AIModelType.Grok4_1Reasoning,
-                new ModelSpec
-                {
-                    ModelType = AIModelType.Grok4_1Reasoning,
-                    Provider = AIProvider.Grok,
-                    ModelId = "grok-4-1-fast-reasoning",
-                    Capabilities = AICapabilities.TextChat
-                                   | AICapabilities.JsonSchema
-                                   | AICapabilities.FunctionCalling,
-                    MaxContextTokens = 2000000,
-                }
-            },
-            {
                 AIModelType.Grok4_2,
                 new ModelSpec
                 {
                     ModelType = AIModelType.Grok4_2,
+                    Provider = AIProvider.Grok,
+                    ModelId = "grok-4.20-non-reasoning",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 2000000,
+                }
+            },
+            {
+                AIModelType.Grok4_2Reasoning,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Grok4_2Reasoning,
                     Provider = AIProvider.Grok,
                     ModelId = "grok-4.20-reasoning",
                     Capabilities = AICapabilities.TextChat
@@ -211,6 +201,7 @@ namespace UnityLLMAPI.Chat
                     ModelType = AIModelType.Grok4_3,
                     Provider = AIProvider.Grok,
                     ModelId = "grok-4.3",
+                    ReasoningEffort = "none",
                     Capabilities = AICapabilities.TextChat
                                    | AICapabilities.Vision
                                    | AICapabilities.JsonSchema
@@ -219,12 +210,41 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
-                AIModelType.Gemini25,
+                AIModelType.Grok4_3Reasoning,
                 new ModelSpec
                 {
-                    ModelType = AIModelType.Gemini25,
+                    ModelType = AIModelType.Grok4_3Reasoning,
+                    Provider = AIProvider.Grok,
+                    ModelId = "grok-4.3",
+                    ReasoningEffort = "low",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1000000,
+                }
+            },
+            {
+                AIModelType.Grok4_5,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Grok4_5,
+                    Provider = AIProvider.Grok,
+                    ModelId = "grok-4.5",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 500000,
+                }
+            },
+            {
+                AIModelType.Gemini35Flash,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Gemini35Flash,
                     Provider = AIProvider.Gemini,
-                    ModelId = "gemini-2.5-pro",
+                    ModelId = "gemini-3.5-flash",
                     Capabilities = AICapabilities.TextChat
                                    | AICapabilities.Vision
                                    | AICapabilities.JsonSchema
@@ -233,55 +253,16 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
-                AIModelType.Gemini25Pro,
+                AIModelType.Gemini31FlashLite,
                 new ModelSpec
                 {
-                    ModelType = AIModelType.Gemini25Pro,
+                    ModelType = AIModelType.Gemini31FlashLite,
                     Provider = AIProvider.Gemini,
-                    ModelId = "gemini-2.5-pro",
+                    ModelId = "gemini-3.1-flash-lite",
                     Capabilities = AICapabilities.TextChat
                                    | AICapabilities.Vision
                                    | AICapabilities.JsonSchema
                                    | AICapabilities.FunctionCalling,
-                    MaxContextTokens = 1048576,
-                }
-            },
-            {
-                AIModelType.Gemini25Flash,
-                new ModelSpec
-                {
-                    ModelType = AIModelType.Gemini25Flash,
-                    Provider = AIProvider.Gemini,
-                    ModelId = "gemini-2.5-flash",
-                    Capabilities = AICapabilities.TextChat
-                                   | AICapabilities.Vision
-                                   | AICapabilities.JsonSchema
-                                   | AICapabilities.FunctionCalling,
-                    MaxContextTokens = 1048576,
-                }
-            },
-            {
-                AIModelType.Gemini25FlashLite,
-                new ModelSpec
-                {
-                    ModelType = AIModelType.Gemini25FlashLite,
-                    Provider = AIProvider.Gemini,
-                    ModelId = "gemini-2.5-flash-lite",
-                    Capabilities = AICapabilities.TextChat
-                                    | AICapabilities.Vision
-                                    | AICapabilities.JsonSchema
-                                    | AICapabilities.FunctionCalling,
-                    MaxContextTokens = 1048576,
-                }
-            },
-            {
-                AIModelType.Gemini25FlashImage,
-                new ModelSpec
-                {
-                    ModelType = AIModelType.Gemini25FlashImage,
-                    Provider = AIProvider.Gemini,
-                    ModelId = "gemini-2.5-flash-image",
-                    Capabilities = AICapabilities.ImageGeneration | AICapabilities.Vision,
                     MaxContextTokens = 1048576,
                 }
             },
@@ -305,7 +286,7 @@ namespace UnityLLMAPI.Chat
                 {
                     ModelType = AIModelType.Gemini3ProImage,
                     Provider = AIProvider.Gemini,
-                    ModelId = "gemini-3-pro-image-preview",
+                    ModelId = "gemini-3-pro-image",
                     Capabilities = AICapabilities.ImageGeneration | AICapabilities.Vision,
                     MaxContextTokens = 1048576,
                 }
@@ -316,7 +297,7 @@ namespace UnityLLMAPI.Chat
                 {
                     ModelType = AIModelType.Gemini31FlashImage,
                     Provider = AIProvider.Gemini,
-                    ModelId = "gemini-3.1-flash-image-preview",
+                    ModelId = "gemini-3.1-flash-image",
                     Capabilities = AICapabilities.ImageGeneration | AICapabilities.Vision,
                     MaxContextTokens = 131072,
                 }
@@ -342,6 +323,34 @@ namespace UnityLLMAPI.Chat
                     ModelType = AIModelType.ClaudeOpus46,
                     Provider = AIProvider.Anthropic,
                     ModelId = "claude-opus-4-6",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1000000,
+                }
+            },
+            {
+                AIModelType.ClaudeSonnet5,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.ClaudeSonnet5,
+                    Provider = AIProvider.Anthropic,
+                    ModelId = "claude-sonnet-5",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1000000,
+                }
+            },
+            {
+                AIModelType.ClaudeOpus48,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.ClaudeOpus48,
+                    Provider = AIProvider.Anthropic,
+                    ModelId = "claude-opus-4-8",
                     Capabilities = AICapabilities.TextChat
                                    | AICapabilities.Vision
                                    | AICapabilities.JsonSchema

@@ -8,19 +8,18 @@ using Newtonsoft.Json.Linq;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityLLMAPI.Common;
-using UnityLLMAPI.Schema;
 
 namespace UnityLLMAPI.Chat
 {
     // Grok (x.ai) 向けの HTTP 実装をまとめた ProviderClient
     internal sealed class GrokClient : IProviderClient
     {
-        private const string ChatEndpoint = "https://api.x.ai/v1/chat/completions";
+        private const string ResponsesEndpoint = "https://api.x.ai/v1/responses";
 
         public AIProvider Provider => AIProvider.Grok;
 
         /// <summary>
-        /// Grok のチャットエンドポイントへ通常チャットを送信する。
+        /// Grok の Responses API へ通常チャットを送信する。
         /// </summary>
         public async Task<RawChatResult> SendChatAsync(
             ModelSpec model,
@@ -38,11 +37,13 @@ namespace UnityLLMAPI.Chat
             var body = new Dictionary<string, object>
             {
                 { "model", model.ModelId },
-                { "messages", MessagePayloadBuilder.BuildOpenAiMessages(messages?.ToList() ?? new List<Message>()) }
+                { "input", MessagePayloadBuilder.BuildResponsesInput(messages?.ToList() ?? new List<Message>()) },
+                { "store", false }
             };
 
-            AddFunctions(body, options?.Functions);
+            MessagePayloadBuilder.AddResponsesFunctions(body, options?.Functions);
             MergeAdditionalBody(body, options?.AdditionalBody);
+            AddReasoningEffort(body, model);
 
             var jsonBody = JsonConvert.SerializeObject(body);
             using var req = BuildRequest(apiKey, jsonBody);
@@ -68,20 +69,22 @@ namespace UnityLLMAPI.Chat
             var body = new Dictionary<string, object>
             {
                 { "model", model.ModelId },
-                { "messages", MessagePayloadBuilder.BuildOpenAiMessages(messages?.ToList() ?? new List<Message>()) },
+                { "input", MessagePayloadBuilder.BuildResponsesInput(messages?.ToList() ?? new List<Message>()) },
+                { "store", false },
                 { "stream", true }
             };
 
-            AddFunctions(body, options?.Functions);
+            MessagePayloadBuilder.AddResponsesFunctions(body, options?.Functions);
             MergeAdditionalBody(body, options?.AdditionalBody);
             body["stream"] = true;
+            AddReasoningEffort(body, model);
 
             var content = new StringBuilder();
             var streamHandler = StreamingDownloadHandler.ForServerSentEvents(payload =>
             {
                 if (string.IsNullOrEmpty(payload)) return;
                 if (payload.Trim() == "[DONE]") return;
-                TryConsumeGrokStreamEvent(payload, content, onContentDelta);
+                TryConsumeResponsesStreamEvent(payload, content, onContentDelta);
             });
 
             var jsonBody = JsonConvert.SerializeObject(body);
@@ -124,16 +127,17 @@ namespace UnityLLMAPI.Chat
             var body = new Dictionary<string, object>
             {
                 { "model", model.ModelId },
-                { "messages", MessagePayloadBuilder.BuildOpenAiMessages(messages?.ToList() ?? new List<Message>()) },
-                { "response_format", new Dictionary<string, object>
+                { "input", MessagePayloadBuilder.BuildResponsesInput(messages?.ToList() ?? new List<Message>()) },
+                { "store", false },
+                { "text", new Dictionary<string, object>
                     {
-                        { "type", "json_schema" },
-                        { "json_schema", parsedSchema ?? new Dictionary<string, object>() }
+                        { "format", MessagePayloadBuilder.BuildResponsesJsonSchemaFormat(parsedSchema) }
                     }
                 }
             };
 
             MergeAdditionalBody(body, options?.AdditionalBody);
+            AddReasoningEffort(body, model);
 
             var jsonBody = JsonConvert.SerializeObject(body);
             using var req = BuildRequest(apiKey, jsonBody);
@@ -166,7 +170,7 @@ namespace UnityLLMAPI.Chat
         /// </summary>
         private static UnityWebRequest BuildRequest(string apiKey, string jsonBody)
         {
-            var req = new UnityWebRequest(ChatEndpoint, "POST")
+            var req = new UnityWebRequest(ResponsesEndpoint, "POST")
             {
                 uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
                 downloadHandler = new DownloadHandlerBuffer()
@@ -181,7 +185,7 @@ namespace UnityLLMAPI.Chat
             string jsonBody,
             StreamingDownloadHandler streamHandler)
         {
-            var req = new UnityWebRequest(ChatEndpoint, "POST")
+            var req = new UnityWebRequest(ResponsesEndpoint, "POST")
             {
                 uploadHandler = new UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(jsonBody)),
                 downloadHandler = streamHandler
@@ -191,7 +195,7 @@ namespace UnityLLMAPI.Chat
             return req;
         }
 
-        private static void TryConsumeGrokStreamEvent(
+        private static void TryConsumeResponsesStreamEvent(
             string payload,
             StringBuilder content,
             System.Action<string> onContentDelta)
@@ -199,10 +203,8 @@ namespace UnityLLMAPI.Chat
             try
             {
                 var obj = JObject.Parse(payload);
-                var delta = obj?["choices"]?[0]?["delta"] as JObject;
-                if (delta == null) return;
-
-                var contentDelta = delta["content"]?.ToString();
+                if ((obj["type"]?.ToString() ?? string.Empty) != "response.output_text.delta") return;
+                var contentDelta = obj["delta"]?.ToString();
                 if (!string.IsNullOrEmpty(contentDelta))
                 {
                     content?.Append(contentDelta);
@@ -216,49 +218,23 @@ namespace UnityLLMAPI.Chat
         }
 
         /// <summary>
-        /// Function Calling 用の関数一覧をボディに追加する。
-        /// </summary>
-        private static void AddFunctions(Dictionary<string, object> body, IReadOnlyList<IJsonSchema> functions)
-        {
-            if (functions == null || functions.Count == 0) return;
-            body["tools"] = functions.Select(BuildFunctionTool).ToList();
-            body["tool_choice"] = "auto";
-        }
-
-        private static Dictionary<string, object> BuildFunctionTool(IJsonSchema functionSchema)
-        {
-            var schema = functionSchema?.GenerateJsonSchema() ?? new Dictionary<string, object>();
-            var name = schema.TryGetValue("name", out var nObj) ? nObj?.ToString() : functionSchema?.Name;
-            var description = schema.TryGetValue("description", out var dObj) ? dObj?.ToString() : string.Empty;
-
-            object parameters = null;
-            if (schema.TryGetValue("parameters", out var pObj)) parameters = pObj;
-            else if (schema.TryGetValue("schema", out var sObj)) parameters = sObj;
-
-            var function = new Dictionary<string, object>
-            {
-                { "name", name ?? string.Empty },
-                { "parameters", parameters ?? new Dictionary<string, object> { { "type", "object" } } }
-            };
-            if (!string.IsNullOrEmpty(description))
-            {
-                function["description"] = description;
-            }
-
-            return new Dictionary<string, object>
-            {
-                { "type", "function" },
-                { "function", function }
-            };
-        }
-
-        /// <summary>
         /// 追加パラメータをボディへマージする。
         /// </summary>
         private static void MergeAdditionalBody(Dictionary<string, object> body, Dictionary<string, object> additional)
         {
             if (body == null || additional == null) return;
             foreach (var kv in additional) body[kv.Key] = kv.Value;
+        }
+
+        private static void AddReasoningEffort(Dictionary<string, object> body, ModelSpec model)
+        {
+            if (body == null || model == null || string.IsNullOrWhiteSpace(model.ReasoningEffort)) return;
+            if (body.ContainsKey("reasoning")) return;
+
+            body["reasoning"] = new Dictionary<string, object>
+            {
+                { "effort", model.ReasoningEffort }
+            };
         }
 
         /// <summary>

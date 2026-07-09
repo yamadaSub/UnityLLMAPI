@@ -2,6 +2,24 @@
 
 このプロジェクトの重要な変更を記録します。
 
+## 1.4.0
+
+### 変更
+- OpenAI と xAI のチャット、ストリーミング、構造化出力、Function Calling を Responses API (`/v1/responses`) へ移行。
+- Gemini のチャット、ストリーミング、構造化出力、Function Calling、画像生成を GA の Interactions API (`/v1/interactions`) へ移行。
+- OpenAI `GPT5_6` / `GPT5_6Terra` / `GPT5_6Luna`、xAI `Grok4_5`、Gemini `Gemini35Flash` / `Gemini31FlashLite`、Anthropic `ClaudeSonnet5` / `ClaudeOpus48` を追加。
+- 廃止対象の `GPT4o`、`Grok2` / `Grok3` / `Grok4_1*`、`Gemini25*`、`EmbeddingModelType.Gemini01*` を削除。
+- Gemini 画像モデルを `gemini-3-pro-image` / `gemini-3.1-flash-image`、Embedding を GA の `gemini-embedding-2` へ更新。
+- Anthropic の strict tool schema に必要な `additionalProperties: false` をネストした object まで付与。
+
+## 1.3.1
+
+### 変更
+- `AIModelType.Grok4_2` のモデル ID を `grok-4.20-non-reasoning` に変更。
+- `AIModelType.Grok4_2Reasoning` / `grok-4.20-reasoning` を追加。
+- `AIModelType.Grok4_3` の既定 `reasoning_effort` を `none` に変更。
+- `AIModelType.Grok4_3Reasoning` / `grok-4.3` を追加。
+
 ## 1.3.0
 
 ### 追加

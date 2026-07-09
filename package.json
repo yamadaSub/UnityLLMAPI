@@ -1,7 +1,7 @@
 {
   "name": "com.yamadasub.llmapi",
   "displayName": "LLMAPI",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "unity": "6000.0",
   "description": "UnityからLLM、画像生成、Embedding、Codex App Serverを共通APIで扱うためのライブラリ",
   "author": {

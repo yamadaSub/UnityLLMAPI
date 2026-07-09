@@ -28,7 +28,7 @@ public class VisionSamples : MonoBehaviour
     public Texture2D imageToDescribe;
 
     [Tooltip("画像認識（Vision）に使用するモデル。GPT-4o や Gemini 2.5 Flash などが指定できます。")]
-    public AIModelType recognitionModel = AIModelType.Gemini25Flash;
+    public AIModelType recognitionModel = AIModelType.Gemini35Flash;
 
     [TextArea]
     [Tooltip("画像説明用の追加プロンプト。空の場合は一般的な説明を要求します。")]
@@ -65,15 +65,16 @@ public class VisionSamples : MonoBehaviour
             }
         };
 
-        // generationConfig の構築
+        // Interactions API の画像出力形式を構築
         var config = new Dictionary<string, object>
         {
-            { "responseModalities", new [] { "IMAGE" } }
+            { "type", "image" },
+            { "mime_type", "image/png" }
         };
         
         var initBody = new Dictionary<string, object>
         {
-            { "generationConfig", config }
+            { "response_format", config }
         };
 
         // 画像生成 API を実行

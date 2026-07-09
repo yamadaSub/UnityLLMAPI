@@ -328,7 +328,7 @@ namespace UnityLLMAPI.Chat
 
         public static AIRequest<ImageGenerationResponse> GenerateImages(
             List<Message> messages,
-            AIModelType model = AIModelType.Gemini25FlashImage,
+            AIModelType model = AIModelType.Gemini31FlashImage,
             Dictionary<string, object> initBody = null,
             CancellationToken cancellationToken = default,
             int timeoutSeconds = -1)
@@ -340,7 +340,7 @@ namespace UnityLLMAPI.Chat
 
         public static AIRequest<GeneratedImage> GenerateImage(
             List<Message> messages,
-            AIModelType model = AIModelType.Gemini25FlashImage,
+            AIModelType model = AIModelType.Gemini31FlashImage,
             Dictionary<string, object> initBody = null,
             CancellationToken cancellationToken = default,
             int timeoutSeconds = -1)

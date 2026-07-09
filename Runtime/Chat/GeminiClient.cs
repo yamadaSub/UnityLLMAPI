@@ -16,12 +16,13 @@ namespace UnityLLMAPI.Chat
     // Gemini (Google) 向けの HTTP 実装をまとめた ProviderClient
     internal sealed class GeminiClient : IProviderClient
     {
-        private const string ApiBase = "https://generativelanguage.googleapis.com/v1beta/models";
+        private const string InteractionsEndpoint = "https://generativelanguage.googleapis.com/v1/interactions";
+        private const string PreviewInteractionsEndpoint = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
         public AIProvider Provider => AIProvider.Gemini;
 
         /// <summary>
-        /// Gemini generateContent を用いて通常チャットを送信する。
+        /// Gemini Interactions API を用いて通常チャットを送信する。
         /// </summary>
         public async Task<RawChatResult> SendChatAsync(
             ModelSpec model,
@@ -36,21 +37,19 @@ namespace UnityLLMAPI.Chat
                 return FailureChatResult(model, "Missing Google API key");
             }
 
-            var endpoint = $"{ApiBase}/{model.ModelId}:generateContent";
             var messageList = messages?.ToList() ?? new List<Message>();
-            var contents = MessagePayloadBuilder.BuildGeminiContents(messageList);
-            if (!HasConversationContents(contents))
+            var input = MessagePayloadBuilder.BuildGeminiInteractionInput(messageList);
+            if (!HasConversationInput(input))
             {
                 return FailureChatResult(model, "Gemini requires at least one non-system message.");
             }
 
-            var body = new Dictionary<string, object> { { "contents", contents } };
-            AddSystemInstruction(body, messageList);
+            var body = BuildInteractionBody(model, messageList, input);
             AddFunctionDeclarations(body, options?.Functions);
             MergeAdditionalBody(body, options?.AdditionalBody);
 
             var jsonBody = JsonConvert.SerializeObject(body);
-            using var req = BuildRequest(endpoint, apiKey, jsonBody);
+            using var req = BuildRequest(GetInteractionsEndpoint(model), apiKey, jsonBody);
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
 
             return BuildRawChatResult(model, req);
@@ -70,18 +69,17 @@ namespace UnityLLMAPI.Chat
                 return FailureChatStreamResult(model, "Missing Google API key");
             }
 
-            var endpoint = $"{ApiBase}/{model.ModelId}:streamGenerateContent?alt=sse";
             var messageList = messages?.ToList() ?? new List<Message>();
-            var contents = MessagePayloadBuilder.BuildGeminiContents(messageList);
-            if (!HasConversationContents(contents))
+            var input = MessagePayloadBuilder.BuildGeminiInteractionInput(messageList);
+            if (!HasConversationInput(input))
             {
                 return FailureChatStreamResult(model, "Gemini requires at least one non-system message.");
             }
 
-            var body = new Dictionary<string, object> { { "contents", contents } };
-            AddSystemInstruction(body, messageList);
+            var body = BuildInteractionBody(model, messageList, input);
             AddFunctionDeclarations(body, options?.Functions);
             MergeAdditionalBody(body, options?.AdditionalBody);
+            body["stream"] = true;
 
             var content = new StringBuilder();
             var streamHandler = StreamingDownloadHandler.ForServerSentEvents(payload =>
@@ -92,7 +90,7 @@ namespace UnityLLMAPI.Chat
             });
 
             var jsonBody = JsonConvert.SerializeObject(body);
-            using var req = BuildStreamRequest(endpoint, apiKey, jsonBody, streamHandler);
+            using var req = BuildStreamRequest(GetInteractionsEndpoint(model), apiKey, jsonBody, streamHandler);
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
             streamHandler.CompleteServerSentEvents();
 
@@ -104,6 +102,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = req.result == UnityWebRequest.Result.Success,
                 StatusCode = req.responseCode,
                 ErrorMessage = req.result == UnityWebRequest.Result.Success ? null : req.error,
+                ResponseHeaders = req.GetResponseHeaders(),
                 RawText = rawText,
                 Content = content.ToString()
             };
@@ -123,31 +122,26 @@ namespace UnityLLMAPI.Chat
                 return FailureChatResult(model, "Missing Google API key");
             }
 
-            var endpoint = $"{ApiBase}/{model.ModelId}:generateContent";
             var messageList = messages?.ToList() ?? new List<Message>();
-            var contents = MessagePayloadBuilder.BuildGeminiContents(messageList);
-            if (!HasConversationContents(contents))
+            var input = MessagePayloadBuilder.BuildGeminiInteractionInput(messageList);
+            if (!HasConversationInput(input))
             {
                 return FailureChatResult(model, "Gemini requires at least one non-system message.");
             }
 
             var schemaObj = ParseSchema(jsonSchema);
-            var body = new Dictionary<string, object>
+            var body = BuildInteractionBody(model, messageList, input);
+            body["response_format"] = new Dictionary<string, object>
             {
-                { "contents", contents },
-                { "generationConfig", new Dictionary<string, object>
-                    {
-                        { "responseMimeType", "application/json" },
-                        { "responseSchema", schemaObj ?? new Dictionary<string, object>{{"type","object"}} }
-                    }
-                }
+                { "type", "text" },
+                { "mime_type", "application/json" },
+                { "schema", schemaObj ?? new Dictionary<string, object> { { "type", "object" } } }
             };
 
-            AddSystemInstruction(body, messageList);
             MergeAdditionalBody(body, options?.AdditionalBody);
 
             var jsonBody = JsonConvert.SerializeObject(body);
-            using var req = BuildRequest(endpoint, apiKey, jsonBody);
+            using var req = BuildRequest(GetInteractionsEndpoint(model), apiKey, jsonBody);
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
 
             return BuildRawChatResult(model, req);
@@ -165,28 +159,24 @@ namespace UnityLLMAPI.Chat
                 return FailureImageResult(model, "Missing Google API key");
             }
 
-            var endpoint = $"{ApiBase}/{model.ModelId}:generateContent";
             var messageList = request?.Messages ?? new List<Message>();
-            var contents = MessagePayloadBuilder.BuildGeminiContents(messageList);
-            if (!HasConversationContents(contents))
+            var input = MessagePayloadBuilder.BuildGeminiInteractionInput(messageList);
+            if (!HasConversationInput(input))
             {
                 return FailureImageResult(model, "Gemini requires at least one non-system message.");
             }
 
-            var body = new Dictionary<string, object> { { "contents", contents } };
-            AddSystemInstruction(body, messageList);
+            var body = BuildInteractionBody(model, messageList, input);
             MergeAdditionalBody(body, request?.AdditionalBody);
-            EnsureImageGenerationConfig(body);
+            EnsureImageResponseFormat(body);
 
             var jsonBody = JsonConvert.SerializeObject(body);
-            using var req = BuildRequest(endpoint, apiKey, jsonBody);
+            using var req = BuildRequest(GetInteractionsEndpoint(model), apiKey, jsonBody);
             await UnityWebRequestUtils.SendAsync(req, ct, request?.TimeoutSeconds ?? -1);
 
             var rawJson = req.downloadHandler?.text;
             var parsed = TryParse(rawJson);
             var images = ExtractImages(parsed);
-            var promptFeedback = parsed?["promptFeedback"]?["blockReason"]?.ToString()
-                                 ?? parsed?["promptFeedback"]?["block_reason"]?.ToString();
 
             return new RawImageResult
             {
@@ -195,9 +185,10 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = req.result == UnityWebRequest.Result.Success,
                 StatusCode = req.responseCode,
                 ErrorMessage = req.result == UnityWebRequest.Result.Success ? null : req.error,
+                ResponseHeaders = req.GetResponseHeaders(),
                 RawJson = rawJson,
                 Images = images,
-                PromptFeedback = promptFeedback
+                PromptFeedback = null
             };
         }
 
@@ -264,6 +255,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = embeddings.Count > 0,
                 StatusCode = lastStatus,
                 ErrorMessage = embeddings.Count > 0 ? null : lastError,
+                ResponseHeaders = new Dictionary<string, string>(),
                 RawJson = lastRaw,
                 Embeddings = embeddings
             };
@@ -308,18 +300,14 @@ namespace UnityLLMAPI.Chat
             try
             {
                 var obj = JObject.Parse(payload);
-                var parts = obj?["candidates"]?[0]?["content"]?["parts"] as JArray;
-                if (parts == null) return;
+                if ((obj["event_type"]?.ToString() ?? string.Empty) != "step.delta") return;
+                var delta = obj["delta"] as JObject;
+                if ((delta?["type"]?.ToString() ?? string.Empty) != "text") return;
 
-                foreach (var part in parts)
-                {
-                    var text = part?["text"]?.ToString();
-                    if (!string.IsNullOrEmpty(text))
-                    {
-                        content?.Append(text);
-                        onContentDelta?.Invoke(text);
-                    }
-                }
+                var text = delta["text"]?.ToString();
+                if (string.IsNullOrEmpty(text)) return;
+                content?.Append(text);
+                onContentDelta?.Invoke(text);
             }
             catch
             {
@@ -327,20 +315,38 @@ namespace UnityLLMAPI.Chat
             }
         }
 
-        private static void AddSystemInstruction(Dictionary<string, object> body, List<Message> messages)
+        private static Dictionary<string, object> BuildInteractionBody(
+            ModelSpec model,
+            List<Message> messages,
+            List<Dictionary<string, object>> input)
         {
-            if (body == null) return;
+            var body = new Dictionary<string, object>
+            {
+                { "model", model.ModelId },
+                { "input", input },
+                { "store", false }
+            };
 
-            var systemInstruction = MessagePayloadBuilder.BuildGeminiSystemInstruction(messages);
-            if (systemInstruction != null)
+            var systemInstruction = MessagePayloadBuilder.BuildSystemInstructionText(messages);
+            if (!string.IsNullOrWhiteSpace(systemInstruction))
             {
                 body["system_instruction"] = systemInstruction;
             }
+
+            return body;
         }
 
-        private static bool HasConversationContents(ICollection<Dictionary<string, object>> contents)
+        private static string GetInteractionsEndpoint(ModelSpec model)
         {
-            return contents != null && contents.Count > 0;
+            return model != null
+                   && model.ModelId.EndsWith("-preview", System.StringComparison.OrdinalIgnoreCase)
+                ? PreviewInteractionsEndpoint
+                : InteractionsEndpoint;
+        }
+
+        private static bool HasConversationInput(ICollection<Dictionary<string, object>> input)
+        {
+            return input != null && input.Count > 0;
         }
 
         /// <summary>
@@ -372,35 +378,26 @@ namespace UnityLLMAPI.Chat
 
                 functionDeclarations.Add(new Dictionary<string, object>
                 {
+                    { "type", "function" },
                     { "name", name },
                     { "description", description ?? string.Empty },
                     { "parameters", parameters ?? new Dictionary<string, object>{{"type","object"}} }
                 });
             }
 
-            body["tools"] = new[]
-            {
-                new Dictionary<string, object> { { "function_declarations", functionDeclarations } }
-            };
-            body["tool_config"] = new Dictionary<string, object>
-            {
-                {
-                    "function_calling_config",
-                    new Dictionary<string, object> { { "mode", "AUTO" } }
-                }
-            };
+            body["tools"] = functionDeclarations;
         }
 
         /// <summary>
-        /// 画像生成リクエストに必要な generationConfig を補完する。
+        /// 画像生成リクエストに必要な response_format を補完する。
         /// </summary>
-        private static void EnsureImageGenerationConfig(Dictionary<string, object> body)
+        private static void EnsureImageResponseFormat(Dictionary<string, object> body)
         {
             if (body == null) return;
-            if (body.ContainsKey("generationConfig")) return;
-            body["generationConfig"] = new Dictionary<string, object>
+            if (body.ContainsKey("response_format")) return;
+            body["response_format"] = new Dictionary<string, object>
             {
-                { "responseModalities", new [] { "IMAGE" } }
+                { "type", "image" }
             };
         }
 
@@ -433,6 +430,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = req.result == UnityWebRequest.Result.Success,
                 StatusCode = req.responseCode,
                 ErrorMessage = req.result == UnityWebRequest.Result.Success ? null : req.error,
+                ResponseHeaders = req.GetResponseHeaders(),
                 RawJson = rawJson,
                 Body = TryParse(rawJson)
             };
@@ -450,6 +448,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = false,
                 StatusCode = 0,
                 ErrorMessage = message,
+                ResponseHeaders = new Dictionary<string, string>(),
                 RawJson = string.Empty,
                 Body = null
             };
@@ -464,6 +463,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = false,
                 StatusCode = 0,
                 ErrorMessage = message,
+                ResponseHeaders = new Dictionary<string, string>(),
                 RawText = string.Empty,
                 Content = string.Empty,
             };
@@ -481,6 +481,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = false,
                 StatusCode = 0,
                 ErrorMessage = message,
+                ResponseHeaders = new Dictionary<string, string>(),
                 RawJson = string.Empty,
                 Images = new List<GeneratedImage>()
             };
@@ -498,6 +499,7 @@ namespace UnityLLMAPI.Chat
                 IsSuccess = false,
                 StatusCode = 0,
                 ErrorMessage = message,
+                ResponseHeaders = new Dictionary<string, string>(),
                 RawJson = string.Empty,
                 Embeddings = new List<SerializableEmbedding>()
             };
@@ -511,25 +513,19 @@ namespace UnityLLMAPI.Chat
             var images = new List<GeneratedImage>();
             if (root == null) return images;
 
-            var generated = root?["generatedImages"] as JArray
-                            ?? root?["generated_images"] as JArray;
-            if (generated != null)
-            {
-                foreach (var entry in generated)
-                {
-                    var imageNode = entry?["image"] ?? entry?["inlineData"] ?? entry?["inline_data"];
-                    AppendImage(images, imageNode);
-                }
-                return images;
-            }
+            var steps = root["steps"] as JArray;
+            if (steps == null) return images;
 
-            var parts = root?["candidates"]?[0]?["content"]?["parts"] as JArray;
-            if (parts != null)
+            foreach (var step in steps.OfType<JObject>())
             {
-                foreach (var part in parts)
+                if ((step["type"]?.ToString() ?? string.Empty) != "model_output") continue;
+                var content = step["content"] as JArray;
+                if (content == null) continue;
+
+                foreach (var item in content.OfType<JObject>())
                 {
-                    var inline = part?["inline_data"] ?? part?["inlineData"];
-                    AppendImage(images, inline);
+                    if ((item["type"]?.ToString() ?? string.Empty) != "image") continue;
+                    AppendImage(images, item);
                 }
             }
 

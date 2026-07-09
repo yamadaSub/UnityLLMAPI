@@ -7,16 +7,17 @@ Server threads with `ephemeral: true` by default and does not persist or reuse
 the returned `threadId`. Pass `initBody["thread"]["ephemeral"] = false` only
 when you intentionally want a saved Codex thread for debugging.
 
-Unity から複数の LLM / Embedding API を共通の API で扱うためのラッパーライブラリです。OpenAI / Grok / Gemini をまとめて、チャット、JSON Schema ベースの構造化応答、Function Calling、画像生成、Embedding を Unity のコードだけで呼び出せます。
+Unity から複数の LLM / Embedding API を共通の API で扱うためのラッパーライブラリです。OpenAI / Grok / Gemini / Anthropic をまとめて、チャット、JSON Schema ベースの構造化応答、Function Calling、画像生成、Embedding を Unity のコードだけで呼び出せます。
 
 ## 1. 概要
 - Unity スクリプトから LLM (テキスト / ビジョン) と Embedding を安全に叩くための補助パッケージです。
 - 対応プロバイダと主なモデル (`AIModelType`):
-  - OpenAI: `GPT4o`, `GPT5`, `GPT5_2`, `GPT5_4`, `GPT5_5`, `GPT5_5AppServer`, `GPT5Mini`
-  - Grok (x.ai): `Grok2`, `Grok3`, `Grok4_1`, `Grok4_1Reasoning`, `Grok4_2`, `Grok4_3`
-  - Anthropic: `ClaudeSonnet46`, `ClaudeOpus46`
-  - Gemini: `Gemini25`, `Gemini25Pro`, `Gemini25Flash`, `Gemini25FlashLite`, `Gemini25FlashImage`（旧 `Gemini25FlashImagePreview`）、`Gemini31`, `Gemini3ProImage`, `Gemini31FlashImage`（Vision / 画像生成に対応）
-- Embedding は OpenAI (text-embedding-3-small / -large)、Gemini Embedding 001 系、Gemini Embedding 2（マルチモーダル入力対応）をサポートします。
+  - OpenAI: `GPT5`, `GPT5_2`, `GPT5_4`, `GPT5_5`, `GPT5_6`, `GPT5_6Terra`, `GPT5_6Luna`, `GPT5_5AppServer`, `GPT5Mini`
+  - Grok (x.ai): `Grok4_2`, `Grok4_2Reasoning`, `Grok4_3`, `Grok4_3Reasoning`, `Grok4_5`
+  - Anthropic: `ClaudeSonnet46`, `ClaudeOpus46`, `ClaudeSonnet5`, `ClaudeOpus48`
+  - Gemini: `Gemini31`, `Gemini35Flash`, `Gemini31FlashLite`, `Gemini3ProImage`, `Gemini31FlashImage`（Vision / 画像生成に対応）
+- Chat API は OpenAI / xAI の Responses API、Gemini の Interactions API、Anthropic の Messages API を使用します。Gemini の安定モデルは `v1`、プレビューモデルは `v1beta` を使用し、サーバー側会話保存は既定で無効です。
+- Embedding は OpenAI (text-embedding-3-small / -large) と Gemini Embedding 2（マルチモーダル入力対応）をサポートします。
 
 ## 2. セットアップ
 
@@ -71,7 +72,7 @@ var messages = new List<Message>
     new Message { role = MessageRole.User,   content = "RuntimeInitializeOnLoadMethod の使い方を教えて。" }
 };
 
-var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini25Flash);
+var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini35Flash);
 Debug.Log(reply);
 ```
 
@@ -93,7 +94,7 @@ var messages = new List<Message>
     }
 };
 
-var visionReply = await AIManager.SendMessageAsync(messages, AIModelType.GPT4o);
+var visionReply = await AIManager.SendMessageAsync(messages, AIModelType.GPT5_6);
 ```
 `MessageContent.FromImageData` や `MessageContent.FromImageUrl` も利用可能です。
 
@@ -113,7 +114,7 @@ var messages = new List<Message>
 
 var stream = await AIManager.SendMessageStreamAsync(
     messages,
-    AIModelType.Gemini25Flash,
+    AIModelType.Gemini35Flash,
     onContentDelta: delta => Debug.Log(delta));
 
 Debug.Log(stream?.Content);
@@ -163,7 +164,7 @@ var messages = new List<Message>
     new Message { role = MessageRole.User,   content = "請求書番号は INV-001、合計は 1500.50 USD、顧客は田中太郎(28)です。" }
 };
 
-var invoice = await AIManager.SendStructuredMessageAsync<Invoice>(messages, AIModelType.GPT4o);
+var invoice = await AIManager.SendStructuredMessageAsync<Invoice>(messages, AIModelType.GPT5_6);
 ```
 `[Description]`, `[Range]`, `[RegularExpression]` のほか `[SchemaRange]`, `[SchemaRegularExpression]` など独自属性で JSON Schema に制約を載せられます。`SendStructuredMessageAsync(targetInstance, ...)` で既存インスタンスへ上書きも可能です。
 
@@ -184,7 +185,7 @@ var messages = new List<Message>
     }
 };
 
-var updated = await AIManager.SendStructuredMessageWithRealTimeSchemaAsync(messages, schemaTemplate, AIModelType.Gemini25Flash);
+var updated = await AIManager.SendStructuredMessageWithRealTimeSchemaAsync(messages, schemaTemplate, AIModelType.Gemini35Flash);
 ```
 
 - Function Calling: 関数を `FunctionSchema<SchemaParameter>` で定義し、`SendFunctionCallMessageAsync` で LLM からの関数呼び出し結果を `IJsonSchema` として受け取ります。
@@ -194,7 +195,7 @@ using UnityLLMAPI.Chat;
 using UnityLLMAPI.Schema;
 
 var functions = new List<IJsonSchema> { new AddNumbersFunction() };
-var functionResult = await AIManager.SendFunctionCallMessageAsync(messages, functions, AIModelType.GPT4o);
+var functionResult = await AIManager.SendFunctionCallMessageAsync(messages, functions, AIModelType.GPT5_6);
 if (functionResult is AddNumbersFunction add)
 {
     Debug.Log($"呼び出された関数: {add.Name}");
@@ -222,12 +223,13 @@ var editMessages = new List<Message>
     }
 };
 
-// 画像モダリティを明示
+// Interactions API の画像出力形式を明示
 var initBody = new Dictionary<string, object>
 {
-    { "generationConfig", new Dictionary<string, object>
+    { "response_format", new Dictionary<string, object>
         {
-            { "responseModalities", new [] { "IMAGE" } }
+            { "type", "image" },
+            { "mime_type", "image/png" }
         }
     }
 };
@@ -266,7 +268,7 @@ var corpus = await EmbeddingManager.CreateEmbeddingsAsync(
 
 var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpus);
 ```
-- モデル指定: `EmbeddingModelType.Gemini01`, `Gemini01_1536`, `Gemini01_768`, `OpenAISmall` (text-embedding-3-small), `OpenAILarge` (text-embedding-3-large)。
+- モデル指定: `EmbeddingModelType.GeminiEmbedding2`, `OpenAISmall` (text-embedding-3-small), `OpenAILarge` (text-embedding-3-large)。
 - `RankByCosine` でコサイン類似度の高い順に並べ替えられます（`SimilarityResult.Index`, `Score`）。
 
 ## 9. サンプルコードの案内
@@ -296,7 +298,7 @@ Package Manager では `Example Usage` と `API Reference` を別々に import �
   - `SendStructuredMessageWithRealTimeSchemaAsync`: `RealTimeJsonSchema` を送り、実行時に更新された値を `IJsonSchema` として取得。
   - `SendStructuredMessageWithSchemaAsync`: 任意の JSON Schema (Dictionary) を指定して Dictionary で受け取る。
   - `SendFunctionCallMessageAsync`: LLM からの Function Calling 結果を `IJsonSchema` として受信。
-- `GenerateImagesAsync` / `GenerateImageAsync`: Gemini での画像生成（Gemini 2.5 Flash Image / Gemini 3 Pro Image Preview / Gemini 3.1 Flash Image）。
+- `GenerateImagesAsync` / `GenerateImageAsync`: Gemini Interactions API での画像生成（Gemini 3 Pro Image / Gemini 3.1 Flash Image）。
 
 - **EmbeddingManager**
   - `CreateEmbeddingAsync(string text, EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2, ..., int? outputDimensionality = null)`: 単一テキストの埋め込み生成（Gemini / OpenAI）。
@@ -304,12 +306,11 @@ Package Manager では `Example Usage` と `API Reference` を別々に import �
   - `EmbeddingModelType.GeminiEmbedding2`: 既定の Gemini 埋め込みモデル。マルチモーダル入力と `128` から `3072` の出力次元指定に対応。
   - `CreateEmbeddingAsync(EmbeddingInput input, EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2, ..., int? outputDimensionality = null)`: マルチモーダル入力を含む単一埋め込み生成。
   - `CreateEmbeddingsAsync(IEnumerable<EmbeddingInput> inputs, EmbeddingModelType model = EmbeddingModelType.GeminiEmbedding2, ..., int? outputDimensionality = null)`: 複数のマルチモーダル入力の埋め込み生成。
-  - `EmbeddingModelType.Gemini01 / Gemini01_1536 / Gemini01_768`: Gemini Embedding 001 系のテキスト専用モデル。
   - `EmbeddingModelType.OpenAISmall / OpenAILarge`: OpenAI text-embedding-3-small / -large を指定。
   - `RankByCosine`: コサイン類似度でコーパスをランキング。
 
 ## 11. 補足・注意点 / ライセンス
-- 画像生成フォーマット（PNG / JPEG など）やモダリティが必要な場合は、`initBody` の `generationConfig` に `responseModalities` などを追加し、Gemini 側の要件に合わせてください。
+- 画像生成フォーマット（PNG / JPEG など）が必要な場合は、`initBody["response_format"]` に Gemini Interactions API の画像出力設定を指定してください。
 - 非 readable な Texture を送る際は GPU 読み戻しが走るためコストが増えます。頻繁に使う場合は Texture を readable にするか、`TextureEncodingUtility.TryGetPngBytes` で一度 PNG 化して再利用してください。
 - Gemini Embedding 2 のマルチモーダル入力で画像を扱う場合、Unity では `Texture` / PNG バイト列 / file URI のいずれかで渡せます。`Texture` をそのまま使う場合の主な制約は PNG エンコード可否とメモリ使用量です。
 - 音声は raw bytes / file URI ベースなら特別な Unity 制約はありません。`AudioClip` から直接埋め込む helper は `AudioClip.GetData` に依存するため、クリップの Import Settings で `Load Type = Decompress On Load` が必要です。

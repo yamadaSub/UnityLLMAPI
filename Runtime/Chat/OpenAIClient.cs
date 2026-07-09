@@ -9,20 +9,19 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityLLMAPI.Common;
 using UnityLLMAPI.Embedding;
-using UnityLLMAPI.Schema;
 
 namespace UnityLLMAPI.Chat
 {
     // OpenAI 向けの HTTP 実装をまとめた ProviderClient
     internal sealed class OpenAIClient : IProviderClient
     {
-        private const string ChatEndpoint = "https://api.openai.com/v1/chat/completions";
+        private const string ResponsesEndpoint = "https://api.openai.com/v1/responses";
         private const string EmbeddingsEndpoint = "https://api.openai.com/v1/embeddings";
 
         public AIProvider Provider => AIProvider.OpenAI;
 
         /// <summary>
-        /// OpenAI Chat Completions で通常チャットを送信する。
+        /// OpenAI Responses API で通常チャットを送信する。
         /// </summary>
         public async Task<RawChatResult> SendChatAsync(
             ModelSpec model,
@@ -40,14 +39,15 @@ namespace UnityLLMAPI.Chat
             var body = new Dictionary<string, object>
             {
                 { "model", model.ModelId },
-                { "messages", MessagePayloadBuilder.BuildOpenAiMessages(messages?.ToList() ?? new List<Message>()) }
+                { "input", MessagePayloadBuilder.BuildResponsesInput(messages?.ToList() ?? new List<Message>()) },
+                { "store", false }
             };
 
-            AddFunctions(body, options?.Functions);
+            MessagePayloadBuilder.AddResponsesFunctions(body, options?.Functions);
             MergeAdditionalBody(body, options?.AdditionalBody);
 
             var jsonBody = JsonConvert.SerializeObject(body);
-            using var req = BuildRequest(ChatEndpoint, apiKey, jsonBody);
+            using var req = BuildRequest(ResponsesEndpoint, apiKey, jsonBody);
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
 
             return BuildRawChatResult(model, req);
@@ -70,11 +70,12 @@ namespace UnityLLMAPI.Chat
             var body = new Dictionary<string, object>
             {
                 { "model", model.ModelId },
-                { "messages", MessagePayloadBuilder.BuildOpenAiMessages(messages?.ToList() ?? new List<Message>()) },
+                { "input", MessagePayloadBuilder.BuildResponsesInput(messages?.ToList() ?? new List<Message>()) },
+                { "store", false },
                 { "stream", true }
             };
 
-            AddFunctions(body, options?.Functions);
+            MessagePayloadBuilder.AddResponsesFunctions(body, options?.Functions);
             MergeAdditionalBody(body, options?.AdditionalBody);
             body["stream"] = true;
 
@@ -83,11 +84,11 @@ namespace UnityLLMAPI.Chat
             {
                 if (string.IsNullOrEmpty(payload)) return;
                 if (payload.Trim() == "[DONE]") return;
-                TryConsumeOpenAiStreamEvent(payload, content, onContentDelta);
+                TryConsumeResponsesStreamEvent(payload, content, onContentDelta);
             });
 
             var jsonBody = JsonConvert.SerializeObject(body);
-            using var req = BuildStreamRequest(ChatEndpoint, apiKey, jsonBody, streamHandler);
+            using var req = BuildStreamRequest(ResponsesEndpoint, apiKey, jsonBody, streamHandler);
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
             streamHandler.CompleteServerSentEvents();
 
@@ -126,11 +127,11 @@ namespace UnityLLMAPI.Chat
             var body = new Dictionary<string, object>
             {
                 { "model", model.ModelId },
-                { "messages", MessagePayloadBuilder.BuildOpenAiMessages(messages?.ToList() ?? new List<Message>()) },
-                { "response_format", new Dictionary<string, object>
+                { "input", MessagePayloadBuilder.BuildResponsesInput(messages?.ToList() ?? new List<Message>()) },
+                { "store", false },
+                { "text", new Dictionary<string, object>
                     {
-                        { "type", "json_schema" },
-                        { "json_schema", parsedSchema ?? new Dictionary<string, object>() }
+                        { "format", MessagePayloadBuilder.BuildResponsesJsonSchemaFormat(parsedSchema) }
                     }
                 }
             };
@@ -138,7 +139,7 @@ namespace UnityLLMAPI.Chat
             MergeAdditionalBody(body, options?.AdditionalBody);
 
             var jsonBody = JsonConvert.SerializeObject(body);
-            using var req = BuildRequest(ChatEndpoint, apiKey, jsonBody);
+            using var req = BuildRequest(ResponsesEndpoint, apiKey, jsonBody);
             await UnityWebRequestUtils.SendAsync(req, ct, options?.TimeoutSeconds ?? -1);
 
             return BuildRawChatResult(model, req);
@@ -254,7 +255,7 @@ namespace UnityLLMAPI.Chat
             return req;
         }
 
-        private static void TryConsumeOpenAiStreamEvent(
+        private static void TryConsumeResponsesStreamEvent(
             string payload,
             StringBuilder content,
             System.Action<string> onContentDelta)
@@ -262,10 +263,8 @@ namespace UnityLLMAPI.Chat
             try
             {
                 var obj = JObject.Parse(payload);
-                var delta = obj?["choices"]?[0]?["delta"] as JObject;
-                if (delta == null) return;
-
-                var contentDelta = delta["content"]?.ToString();
+                if ((obj["type"]?.ToString() ?? string.Empty) != "response.output_text.delta") return;
+                var contentDelta = obj["delta"]?.ToString();
                 if (!string.IsNullOrEmpty(contentDelta))
                 {
                     content?.Append(contentDelta);
@@ -307,43 +306,6 @@ namespace UnityLLMAPI.Chat
             {
                 body[kv.Key] = kv.Value;
             }
-        }
-
-        /// <summary>
-        /// Function Calling 用のパラメータを OpenAI ボディに追加する。
-        /// </summary>
-        private static void AddFunctions(Dictionary<string, object> body, IReadOnlyList<IJsonSchema> functions)
-        {
-            if (functions == null || functions.Count == 0) return;
-            body["tools"] = functions.Select(BuildFunctionTool).ToList();
-            body["tool_choice"] = "auto";
-        }
-
-        private static Dictionary<string, object> BuildFunctionTool(IJsonSchema functionSchema)
-        {
-            var schema = functionSchema?.GenerateJsonSchema() ?? new Dictionary<string, object>();
-            var name = schema.TryGetValue("name", out var nObj) ? nObj?.ToString() : functionSchema?.Name;
-            var description = schema.TryGetValue("description", out var dObj) ? dObj?.ToString() : string.Empty;
-
-            object parameters = null;
-            if (schema.TryGetValue("parameters", out var pObj)) parameters = pObj;
-            else if (schema.TryGetValue("schema", out var sObj)) parameters = sObj;
-
-            var function = new Dictionary<string, object>
-            {
-                { "name", name ?? string.Empty },
-                { "parameters", parameters ?? new Dictionary<string, object> { { "type", "object" } } }
-            };
-            if (!string.IsNullOrEmpty(description))
-            {
-                function["description"] = description;
-            }
-
-            return new Dictionary<string, object>
-            {
-                { "type", "function" },
-                { "function", function }
-            };
         }
 
         /// <summary>

@@ -20,29 +20,29 @@ namespace UnityLLMAPI.Chat
 /// </summary>
 public enum AIModelType
 {
-    GPT4o = 0,
     GPT5 = 1,
     GPT5_2 = 13,
     GPT5_4 = 19,
     GPT5_5 = 20,
+    GPT5_6 = 26,
+    GPT5_6Terra = 27,
+    GPT5_6Luna = 28,
     GPT5_5AppServer = 23,
     GPT5Mini = 2,
-    Grok2 = 4,
-    Grok3 = 5,
-    Grok4_1 = 14,
-    Grok4_1Reasoning = 15,
     Grok4_2 = 21,
+    Grok4_2Reasoning = 24,
     Grok4_3 = 22,
-    Gemini25 = 6,
-    Gemini25Pro = 7,
-    Gemini25Flash = 8,
-    Gemini25FlashLite = 9,
+    Grok4_3Reasoning = 25,
+    Grok4_5 = 29,
     Gemini31 = 10,
+    Gemini35Flash = 31,
+    Gemini31FlashLite = 32,
     Gemini3ProImage = 11,
-    Gemini25FlashImage = 12,
     Gemini31FlashImage = 16,
     ClaudeSonnet46 = 17,
-    ClaudeOpus46 = 18
+    ClaudeOpus46 = 18,
+    ClaudeSonnet5 = 33,
+    ClaudeOpus48 = 34
 }
 
 /// <summary>
@@ -680,7 +680,7 @@ public static class AIManager
     /// </summary>
     public static async System.Threading.Tasks.Task<ImageGenerationResponse> GenerateImagesAsync(
         List<Message> messages,
-        AIModelType model = AIModelType.Gemini25FlashImage,
+        AIModelType model = AIModelType.Gemini31FlashImage,
         Dictionary<string, object> initBody = null,
         System.Threading.CancellationToken cancellationToken = default,
         int timeoutSeconds = -1)
@@ -712,7 +712,7 @@ public static class AIManager
     /// </summary>
     public static async System.Threading.Tasks.Task<GeneratedImage> GenerateImageAsync(
         List<Message> messages,
-        AIModelType model = AIModelType.Gemini25FlashImage,
+        AIModelType model = AIModelType.Gemini31FlashImage,
         Dictionary<string, object> initBody = null,
         System.Threading.CancellationToken cancellationToken = default,
         int timeoutSeconds = -1)

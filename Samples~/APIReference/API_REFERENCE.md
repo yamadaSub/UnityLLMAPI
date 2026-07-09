@@ -20,6 +20,19 @@ In the Unity Editor you can also use:
 
 ## Endpoint And Model Metadata
 
+Provider clients use the current generation endpoints:
+
+- OpenAI: `POST https://api.openai.com/v1/responses`
+- xAI: `POST https://api.x.ai/v1/responses`
+- Gemini stable: `POST https://generativelanguage.googleapis.com/v1/interactions`
+- Gemini preview: `POST https://generativelanguage.googleapis.com/v1beta/interactions`
+- Anthropic: `POST https://api.anthropic.com/v1/messages`
+
+OpenAI, xAI, and Gemini calls set `store: false` by default because
+UnityLLMAPI already sends the complete local message history. Values supplied
+through `initBody` are endpoint-native top-level fields and may override this
+default.
+
 Use `AIManager.GetModelSpec(...)` to inspect the static registry entry for an
 `AIModelType`. Use `AIManager.GetResolvedModelSpec(...)` when you need the
 effective provider after endpoint overrides are applied.
@@ -104,24 +117,31 @@ var messages = new List<Message>
     new Message { role = MessageRole.User, content = "Explain what ScriptableObject is used for." }
 };
 
-var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini25Flash);
+var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini35Flash);
 Debug.Log(reply);
 ```
 
 Useful chat-oriented models:
 
-- `AIModelType.Gemini25Flash`
+- `AIModelType.Gemini35Flash`
 - `AIModelType.Gemini31`
+- `AIModelType.Gemini31FlashLite`
 - `AIModelType.ClaudeSonnet46`
 - `AIModelType.ClaudeOpus46`
-- `AIModelType.GPT4o`
+- `AIModelType.ClaudeSonnet5`
+- `AIModelType.ClaudeOpus48`
 - `AIModelType.GPT5`
 - `AIModelType.GPT5_4`
 - `AIModelType.GPT5_5`
+- `AIModelType.GPT5_6`
+- `AIModelType.GPT5_6Terra`
+- `AIModelType.GPT5_6Luna`
 - `AIModelType.GPT5_5AppServer`
-- `AIModelType.Grok4_1`
 - `AIModelType.Grok4_2`
+- `AIModelType.Grok4_2Reasoning`
 - `AIModelType.Grok4_3`
+- `AIModelType.Grok4_3Reasoning`
+- `AIModelType.Grok4_5`
 
 ## Streaming Chat
 
@@ -139,7 +159,7 @@ var messages = new List<Message>
 
 var stream = await AIManager.SendMessageStreamAsync(
     messages,
-    AIModelType.Gemini25Flash,
+    AIModelType.Gemini35Flash,
     onContentDelta: delta => Debug.Log(delta));
 
 Debug.Log(stream?.Content);
@@ -166,7 +186,7 @@ IEnumerator RunEnemyPlan()
 
     var request = AIRequest.SendStructured<EnemyPlan>(
         messages,
-        AIModelType.Gemini25Flash,
+        AIModelType.Gemini35Flash,
         timeoutSeconds: 60);
 
     yield return PlayIntroAnimation();
@@ -241,8 +261,8 @@ Image helpers:
 - `MessageContent.FromImageData(byte[] data, string mime)`
 - `MessageContent.FromImageUrl(string url, string mime = null)`
 
-Vision-capable chat models include `ClaudeSonnet46`, `ClaudeOpus46`, `GPT4o`,
-`GPT5_5AppServer`, `Gemini25Flash`, and `Gemini31`.
+Vision-capable chat models include `ClaudeSonnet5`, `ClaudeOpus48`, `GPT5_6`,
+`GPT5_5AppServer`, `Gemini35Flash`, and `Gemini31`.
 
 ## Structured Output
 
@@ -269,7 +289,7 @@ var messages = new List<Message>
 
 var result = await AIManager.SendStructuredMessageAsync<EnemyConfig>(
     messages,
-    AIModelType.Gemini25Flash);
+    AIModelType.Gemini35Flash);
 
 Debug.Log(result?.name);
 ```
@@ -319,7 +339,7 @@ var messages = new List<Message>
 await AIManager.SendStructuredMessageAsync(
     choice,
     messages,
-    AIModelType.Gemini25Flash);
+    AIModelType.Gemini35Flash);
 
 Debug.Log(choice.selectedAction);
 ```
@@ -353,7 +373,7 @@ var functions = new List<IJsonSchema>
 var result = await AIManager.SendFunctionCallMessageAsync(
     messages,
     functions,
-    AIModelType.Gemini25Flash);
+    AIModelType.Gemini35Flash);
 ```
 
 Example function schema:
@@ -424,10 +444,11 @@ var prompts = new List<Message>
 var initBody = new Dictionary<string, object>
 {
     {
-        "generationConfig",
+        "response_format",
         new Dictionary<string, object>
         {
-            { "responseModalities", new[] { "IMAGE" } }
+            { "type", "image" },
+            { "mime_type", "image/png" }
         }
     }
 };
@@ -460,7 +481,6 @@ Keep `outputPath` at the top level of `initBody`; thread options belong under
 
 Image-capable generation models:
 
-- `AIModelType.Gemini25FlashImage`
 - `AIModelType.Gemini31FlashImage`
 - `AIModelType.Gemini3ProImage`
 - `AIModelType.GPT5_5AppServer` when a Codex App Server URL is configured
@@ -495,9 +515,6 @@ var ranked = EmbeddingManager.RankByCosine(queryEmbedding, corpus);
 Embedding models:
 
 - `EmbeddingModelType.GeminiEmbedding2`
-- `EmbeddingModelType.Gemini01`
-- `EmbeddingModelType.Gemini01_1536`
-- `EmbeddingModelType.Gemini01_768`
 - `EmbeddingModelType.OpenAISmall`
 - `EmbeddingModelType.OpenAILarge`
 
@@ -630,5 +647,4 @@ Useful members:
 - `Message.content` is enough for text-only prompts.
 - `Message.parts` is the preferred path for multimodal prompts.
 - `GeminiEmbedding2` is the default embedding model in the current package.
-- `Gemini01*` models remain available for text-only compatibility scenarios.
 - `Texture2D` and `RenderTexture` inputs can be converted through the built-in texture helpers.
