@@ -4,7 +4,7 @@ using UnityLLMAPI.Chat;
 
 /// <summary>
 /// 画像編集・画像認識ワークフローのサンプル。
-/// Gemini 2.5 Flash Image（GA）を利用した編集、および Vision モデルへの画像解析を実演する。
+/// Gemini の画像モデルを利用した編集、および Vision モデルへの画像解析を実演する。
 /// </summary>
 public class VisionSamples : MonoBehaviour
 {
@@ -16,7 +16,7 @@ public class VisionSamples : MonoBehaviour
     [Tooltip("画像編集時にモデルへ伝える指示。空の場合は『水彩画風にしてください。』を使用します。")]
     public string editInstruction = "水彩画風にしてください。";
 
-    [Tooltip("画像生成・編集に使用するモデル。現在は Gemini 2.5 Flash Image (GA) / Gemini 3 Pro Image Preview / Gemini 3.1 Flash Image がサポートされています。")]
+    [Tooltip("画像生成・編集に使用するモデル。Gemini 3 Pro Image / Gemini 3.1 Flash Image がサポートされています。")]
     public AIModelType imageGenerationModel = AIModelType.Gemini31FlashImage;
 
     [Header("Output Settings")]
@@ -27,8 +27,8 @@ public class VisionSamples : MonoBehaviour
     [Tooltip("マルチモーダルモデルに解析させる画像。")]
     public Texture2D imageToDescribe;
 
-    [Tooltip("画像認識（Vision）に使用するモデル。GPT-4o や Gemini 2.5 Flash などが指定できます。")]
-    public AIModelType recognitionModel = AIModelType.Gemini35Flash;
+    [Tooltip("画像認識（Vision）に使用するモデル。GPT-5.6 や Gemini 3.7 Flash などが指定できます。")]
+    public AIModelType recognitionModel = AIModelType.Gemini37Flash;
 
     [TextArea]
     [Tooltip("画像説明用の追加プロンプト。空の場合は一般的な説明を要求します。")]

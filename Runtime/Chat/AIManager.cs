@@ -34,15 +34,20 @@ public enum AIModelType
     Grok4_3 = 22,
     Grok4_3Reasoning = 25,
     Grok4_5 = 29,
+    Grok4_6 = 35,
     Gemini31 = 10,
     Gemini35Flash = 31,
-    Gemini31FlashLite = 32,
+    Gemini37Flash = 36,
+    Gemini35FlashLite = 37,
     Gemini3ProImage = 11,
     Gemini31FlashImage = 16,
     ClaudeSonnet46 = 17,
     ClaudeOpus46 = 18,
     ClaudeSonnet5 = 33,
-    ClaudeOpus48 = 34
+    ClaudeOpus48 = 34,
+    ClaudeOpus5 = 38,
+    ClaudeFable5 = 39,
+    ClaudeFable51 = 41
 }
 
 /// <summary>

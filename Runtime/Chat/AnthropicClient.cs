@@ -17,7 +17,6 @@ namespace UnityLLMAPI.Chat
         private const string MessagesEndpoint = "https://api.anthropic.com/v1/messages";
         private const string AnthropicVersion = "2023-06-01";
         private const int DefaultMaxTokens = 4096;
-        private const string StructuredOutputToolName = "structured_output";
 
         public AIProvider Provider => AIProvider.Anthropic;
 
@@ -35,7 +34,7 @@ namespace UnityLLMAPI.Chat
             }
 
             var body = BuildBaseMessageBody(model, messages, options?.AdditionalBody, false);
-            AddFunctions(body, options?.Functions);
+            AddFunctions(body, options?.Functions, model);
 
             var jsonBody = JsonConvert.SerializeObject(body);
             using var req = BuildRequest(MessagesEndpoint, apiKey, jsonBody);
@@ -59,7 +58,7 @@ namespace UnityLLMAPI.Chat
             }
 
             var body = BuildBaseMessageBody(model, messages, options?.AdditionalBody, true);
-            AddFunctions(body, options?.Functions);
+            AddFunctions(body, options?.Functions, model);
 
             var content = new StringBuilder();
             var streamHandler = StreamingDownloadHandler.ForServerSentEvents(payload =>
@@ -101,7 +100,7 @@ namespace UnityLLMAPI.Chat
             }
 
             var body = BuildBaseMessageBody(model, messages, options?.AdditionalBody, false);
-            AddStructuredOutputTool(body, ParseSchema(jsonSchema));
+            AddStructuredOutputFormat(body, ParseSchema(jsonSchema));
 
             var jsonBody = JsonConvert.SerializeObject(body);
             using var req = BuildRequest(MessagesEndpoint, apiKey, jsonBody);
@@ -155,11 +154,16 @@ namespace UnityLLMAPI.Chat
             return body;
         }
 
-        private static void AddFunctions(Dictionary<string, object> body, IReadOnlyList<IJsonSchema> functions)
+        private static void AddFunctions(
+            Dictionary<string, object> body,
+            IReadOnlyList<IJsonSchema> functions,
+            ModelSpec model)
         {
             if (functions == null || functions.Count == 0) return;
 
             body["tools"] = functions.Select(BuildFunctionTool).ToList();
+            if (model.ModelType == AIModelType.ClaudeFable51) return;
+
             body["tool_choice"] = new Dictionary<string, object>
             {
                 { "type", "any" }
@@ -185,23 +189,18 @@ namespace UnityLLMAPI.Chat
             };
         }
 
-        private static void AddStructuredOutputTool(Dictionary<string, object> body, object schema)
+        private static void AddStructuredOutputFormat(Dictionary<string, object> body, object schema)
         {
-            body["tools"] = new[]
+            body["output_config"] = new Dictionary<string, object>
             {
-                new Dictionary<string, object>
                 {
-                    { "name", StructuredOutputToolName },
-                    { "description", "Return the final answer as JSON that matches the schema exactly." },
-                    { "input_schema", NormalizeStrictInputSchema(schema) },
-                    { "strict", true }
+                    "format",
+                    new Dictionary<string, object>
+                    {
+                        { "type", "json_schema" },
+                        { "schema", NormalizeStrictInputSchema(schema) }
+                    }
                 }
-            };
-
-            body["tool_choice"] = new Dictionary<string, object>
-            {
-                { "type", "tool" },
-                { "name", StructuredOutputToolName }
             };
         }
 

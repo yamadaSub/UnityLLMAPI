@@ -11,7 +11,10 @@ namespace UnityLLMAPI.Chat
     public enum CodexAppServerModelType
     {
         AppServerDefault = 0,
-        GPT5_5 = 1
+        GPT5_5 = 1,
+        GPT5_6Sol = 2,
+        GPT5_6Terra = 3,
+        GPT5_6Luna = 4
     }
 
     public static class CodexAppServerModelOptions
@@ -24,6 +27,12 @@ namespace UnityLLMAPI.Chat
                     return null;
                 case CodexAppServerModelType.GPT5_5:
                     return "gpt-5.5";
+                case CodexAppServerModelType.GPT5_6Sol:
+                    return "gpt-5.6-sol";
+                case CodexAppServerModelType.GPT5_6Terra:
+                    return "gpt-5.6-terra";
+                case CodexAppServerModelType.GPT5_6Luna:
+                    return "gpt-5.6-luna";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(model), model, null);
             }

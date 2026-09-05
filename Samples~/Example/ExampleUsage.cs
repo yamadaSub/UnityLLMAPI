@@ -12,8 +12,8 @@ using UnityLLMAPI.Schema;
 public class ExampleUsage : MonoBehaviour
 {
     [Header("共通設定")]
-    [Tooltip("テキスト系の呼び出しで使用するモデル。Gemini 3.1 / Gemini 2.5 / GPT などを指定可能。")]
-    public AIModelType chatModel = AIModelType.Gemini35Flash;
+    [Tooltip("テキスト系の呼び出しで使用するモデル。Gemini / GPT / Claude / Grok を指定できます。")]
+    public AIModelType chatModel = AIModelType.Gemini37Flash;
 
     [Tooltip("チャット送信時のユーザープロンプト。")]
     [TextArea]

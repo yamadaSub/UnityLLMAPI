@@ -13,9 +13,9 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
 - Unity スクリプトから LLM (テキスト / ビジョン) と Embedding を安全に叩くための補助パッケージです。
 - 対応プロバイダと主なモデル (`AIModelType`):
   - OpenAI: `GPT5`, `GPT5_2`, `GPT5_4`, `GPT5_5`, `GPT5_6`, `GPT5_6Terra`, `GPT5_6Luna`, `GPT5_5AppServer`, `GPT5Mini`
-  - Grok (x.ai): `Grok4_2`, `Grok4_2Reasoning`, `Grok4_3`, `Grok4_3Reasoning`, `Grok4_5`
-  - Anthropic: `ClaudeSonnet46`, `ClaudeOpus46`, `ClaudeSonnet5`, `ClaudeOpus48`
-  - Gemini: `Gemini31`, `Gemini35Flash`, `Gemini31FlashLite`, `Gemini3ProImage`, `Gemini31FlashImage`（Vision / 画像生成に対応）
+  - Grok (x.ai): `Grok4_2`, `Grok4_2Reasoning`, `Grok4_3`, `Grok4_3Reasoning`, `Grok4_5`, `Grok4_6`
+  - Anthropic: `ClaudeSonnet46`, `ClaudeOpus46`, `ClaudeSonnet5`, `ClaudeOpus48`, `ClaudeOpus5`, `ClaudeFable5`, `ClaudeFable51`
+  - Gemini: `Gemini31`, `Gemini35Flash`, `Gemini37Flash`, `Gemini35FlashLite`, `Gemini3ProImage`, `Gemini31FlashImage`（Vision / 画像生成に対応）
 - Chat API は OpenAI / xAI の Responses API、Gemini の Interactions API、Anthropic の Messages API を使用します。Gemini の安定モデルは `v1`、プレビューモデルは `v1beta` を使用し、サーバー側会話保存は既定で無効です。
 - Embedding は OpenAI (text-embedding-3-small / -large) と Gemini Embedding 2（マルチモーダル入力対応）をサポートします。
 
@@ -41,14 +41,14 @@ Unity から複数の LLM / Embedding API を共通の API で扱うためのラ
   3. 環境変数（Process -> User -> Machine）
 
 ### Codex App Server モード
-- `AIModelType.GPT5_5AppServer` は LLMAPI から Codex App Server を呼ぶための GPT-5.5 互換ルートです。通常の OpenAI API ではなく、設定された App Server の thread/turn/event プロトコルで実行します。
+- `AIModelType.GPT5_5AppServer` は LLMAPI から Codex App Server を呼ぶための互換ルートです。通常の OpenAI API ではなく、設定された App Server の thread/turn/event プロトコルで実行します。
 - 通常の OpenAI/GPT 系モデルは Codex App Server へ自動リルートされません。Codex App Server を使う場合は `AIModelType.GPT5_5AppServer` を明示してください。
 - 設定方法
   - Editor: `Tools > UnityLLMAPI > Codex App Server` で `ws://127.0.0.1:4500` のような WebSocket URL を保存し、必要に応じて app-server を起動します。履歴分離のためプロジェクト専用 `CODEX_HOME` を使い、必要な `auth.json` / `config.toml` だけを通常の Codex CLI プロファイルから同期できます。
   - Runtime: `AIManagerBehaviour` に Codex App Server URL を設定します。
   - Code: `AIManager.SetCodexAppServerBaseUrl("ws://127.0.0.1:4500");` で Codex App Server URL だけを明示設定できます。
 - Codex App Server は単発 HTTP API ではなく JSON-RPC の thread/turn/event プロトコルです。このモードでは内部で `thread/start` -> `turn/start` を実行し、`item/agentMessage/delta` / `item/completed` / `turn/completed` を読んで既存のレスポンス形式へ変換します。
-- 実際の Codex モデルは app-server 側の設定値を既定で使います。明示的に変える場合は LLMAPI の `AIModelType` ではなく、App Server 専用の `CodexAppServerModelType` を使って `initBody["model"]` に反映します。
+- 実際の Codex モデルは app-server 側の設定値を既定で使います。明示的に変える場合は LLMAPI の `AIModelType` ではなく、App Server 専用の `CodexAppServerModelType` (`GPT5_5` / `GPT5_6Sol` / `GPT5_6Terra` / `GPT5_6Luna`) を使って `initBody["model"]` に反映します。
 - 画像認識などのマルチモーダル入力は `Message.parts` の `MessageContent.FromImage(...)` / `FromImageUrl(...)` を App Server の `image` / `localImage` input item に変換して送信します。
 - 構造化出力は Codex App Server の `outputSchema` を使います。Function Calling は直接の tool call ではなく、`outputSchema` による関数名 / 引数抽出へ変換して既存の `IJsonSchema` 戻り値と互換化します。画像生成は `$imagegen` skill を呼び、PNG を `Assets/...` に保存させてから `GeneratedImage` として読み戻します。Embedding はこのモードでは未対応です。
 - 実行サンプルは `Samples~/Example/CodexAppServerSample.cs` と `Samples~/Example/CodexAppServerImageGenSample.cs` です。Codex App Server URL は Editor 設定 / `AIManagerBehaviour` / 環境変数から解決されるため、サンプルごとの `serverUrl` は持ちません。GameObject に追加して Inspector の Context Menu から実行します。
@@ -72,7 +72,7 @@ var messages = new List<Message>
     new Message { role = MessageRole.User,   content = "RuntimeInitializeOnLoadMethod の使い方を教えて。" }
 };
 
-var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini35Flash);
+var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini37Flash);
 Debug.Log(reply);
 ```
 
@@ -114,7 +114,7 @@ var messages = new List<Message>
 
 var stream = await AIManager.SendMessageStreamAsync(
     messages,
-    AIModelType.Gemini35Flash,
+    AIModelType.Gemini37Flash,
     onContentDelta: delta => Debug.Log(delta));
 
 Debug.Log(stream?.Content);
@@ -185,7 +185,7 @@ var messages = new List<Message>
     }
 };
 
-var updated = await AIManager.SendStructuredMessageWithRealTimeSchemaAsync(messages, schemaTemplate, AIModelType.Gemini35Flash);
+var updated = await AIManager.SendStructuredMessageWithRealTimeSchemaAsync(messages, schemaTemplate, AIModelType.Gemini37Flash);
 ```
 
 - Function Calling: 関数を `FunctionSchema<SchemaParameter>` で定義し、`SendFunctionCallMessageAsync` で LLM からの関数呼び出し結果を `IJsonSchema` として受け取ります。
@@ -204,7 +204,7 @@ if (functionResult is AddNumbersFunction add)
 ```
 
 ## 7. 画像生成
-Gemini 2.5 Flash Image（GA）/ Gemini 3 Pro Image Preview / Gemini 3.1 Flash Image を使って、テキスト指示と既存画像から画像生成・編集ができます。
+Gemini 3 Pro Image / Gemini 3.1 Flash Image を使って、テキスト指示と既存画像から画像生成・編集ができます。
 
 ```csharp
 using System.Collections.Generic;
@@ -247,7 +247,7 @@ if (response?.images.Count > 0)
 ```
 `MessageContent.FromImageData` / `FromImageUrl` も利用可能です。生成結果は `ImageGenerationResponse` に `GeneratedImage`（`mimeType`, `data`）として格納されます。
 
-Codex App Server モードで画像生成する場合は、LLMAPI の呼び出しモデルに `AIModelType.GPT5_5AppServer` を使い、`initBody["outputPath"]` に Unity プロジェクト相対パス（例: `Assets/Generated/coin_icon.png`）を指定します。Codex の実モデルを明示したい場合だけ、`CodexAppServerModelOptions.ApplyTo(initBody, CodexAppServerModelType.GPT5_5)` を使います。内部では `$imagegen` を含む turn を開始し、Codex が保存した PNG を UnityLLMAPI が読み戻します。
+Codex App Server モードで画像生成する場合は、LLMAPI の呼び出しモデルに `AIModelType.GPT5_5AppServer` を使い、`initBody["outputPath"]` に Unity プロジェクト相対パス（例: `Assets/Generated/coin_icon.png`）を指定します。Codex の実モデルを明示したい場合だけ、`CodexAppServerModelOptions.ApplyTo(initBody, CodexAppServerModelType.GPT5_6Sol)` のように指定します。内部では `$imagegen` を含む turn を開始し、Codex が保存した PNG を UnityLLMAPI が読み戻します。
 
 ## 8. 埋め込みベクトル（Embedding）
 ```csharp

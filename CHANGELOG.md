@@ -7,10 +7,12 @@
 ### 変更
 - OpenAI と xAI のチャット、ストリーミング、構造化出力、Function Calling を Responses API (`/v1/responses`) へ移行。
 - Gemini のチャット、ストリーミング、構造化出力、Function Calling、画像生成を GA の Interactions API (`/v1/interactions`) へ移行。
-- OpenAI `GPT5_6` / `GPT5_6Terra` / `GPT5_6Luna`、xAI `Grok4_5`、Gemini `Gemini35Flash` / `Gemini31FlashLite`、Anthropic `ClaudeSonnet5` / `ClaudeOpus48` を追加。
-- 廃止対象の `GPT4o`、`Grok2` / `Grok3` / `Grok4_1*`、`Gemini25*`、`EmbeddingModelType.Gemini01*` を削除。
+- OpenAI `GPT5_6` / `GPT5_6Terra` / `GPT5_6Luna`、xAI `Grok4_5` / `Grok4_6`、Gemini `Gemini35Flash` / `Gemini37Flash` / `Gemini35FlashLite`、Anthropic `ClaudeSonnet5` / `ClaudeOpus48` / `ClaudeOpus5` / `ClaudeFable5` / `ClaudeFable51` を追加。
+- 廃止対象の `GPT4o`、`Grok2` / `Grok3` / `Grok4_1*`、`Gemini25*` / `Gemini31FlashLite`、`EmbeddingModelType.Gemini01*` を削除。
 - Gemini 画像モデルを `gemini-3-pro-image` / `gemini-3.1-flash-image`、Embedding を GA の `gemini-embedding-2` へ更新。
-- Anthropic の strict tool schema に必要な `additionalProperties: false` をネストした object まで付与。
+- Anthropic の構造化出力を `output_config.format` へ移行し、strict schema に必要な `additionalProperties: false` をネストした object まで付与。
+- Claude Fable 5.1 の Function Calling は非対応の強制 `tool_choice` を送らず、既定の `auto` を使用。
+- Codex App Server の型付きモデル指定に `GPT5_6Sol` / `GPT5_6Terra` / `GPT5_6Luna` を追加。
 
 ## 1.3.1
 

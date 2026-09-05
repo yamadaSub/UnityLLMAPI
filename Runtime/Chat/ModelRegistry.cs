@@ -239,6 +239,20 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
+                AIModelType.Grok4_6,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Grok4_6,
+                    Provider = AIProvider.Grok,
+                    ModelId = "grok-4.6",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 500000,
+                }
+            },
+            {
                 AIModelType.Gemini35Flash,
                 new ModelSpec
                 {
@@ -253,12 +267,26 @@ namespace UnityLLMAPI.Chat
                 }
             },
             {
-                AIModelType.Gemini31FlashLite,
+                AIModelType.Gemini37Flash,
                 new ModelSpec
                 {
-                    ModelType = AIModelType.Gemini31FlashLite,
+                    ModelType = AIModelType.Gemini37Flash,
                     Provider = AIProvider.Gemini,
-                    ModelId = "gemini-3.1-flash-lite",
+                    ModelId = "gemini-3.7-flash",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1048576,
+                }
+            },
+            {
+                AIModelType.Gemini35FlashLite,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.Gemini35FlashLite,
+                    Provider = AIProvider.Gemini,
+                    ModelId = "gemini-3.5-flash-lite",
                     Capabilities = AICapabilities.TextChat
                                    | AICapabilities.Vision
                                    | AICapabilities.JsonSchema
@@ -351,6 +379,48 @@ namespace UnityLLMAPI.Chat
                     ModelType = AIModelType.ClaudeOpus48,
                     Provider = AIProvider.Anthropic,
                     ModelId = "claude-opus-4-8",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1000000,
+                }
+            },
+            {
+                AIModelType.ClaudeOpus5,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.ClaudeOpus5,
+                    Provider = AIProvider.Anthropic,
+                    ModelId = "claude-opus-5",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1000000,
+                }
+            },
+            {
+                AIModelType.ClaudeFable5,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.ClaudeFable5,
+                    Provider = AIProvider.Anthropic,
+                    ModelId = "claude-fable-5",
+                    Capabilities = AICapabilities.TextChat
+                                   | AICapabilities.Vision
+                                   | AICapabilities.JsonSchema
+                                   | AICapabilities.FunctionCalling,
+                    MaxContextTokens = 1000000,
+                }
+            },
+            {
+                AIModelType.ClaudeFable51,
+                new ModelSpec
+                {
+                    ModelType = AIModelType.ClaudeFable51,
+                    Provider = AIProvider.Anthropic,
+                    ModelId = "claude-fable-5-1",
                     Capabilities = AICapabilities.TextChat
                                    | AICapabilities.Vision
                                    | AICapabilities.JsonSchema

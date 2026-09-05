@@ -62,7 +62,7 @@ setting the Codex App Server URL. It no longer reroutes normal OpenAI models.
 
 ## Codex App Server Mode
 
-`AIModelType.GPT5_5AppServer` routes GPT-5.5 requests through Codex App Server.
+`AIModelType.GPT5_5AppServer` routes compatibility requests through Codex App Server.
 OpenAI/GPT model requests are not automatically routed through Codex App Server.
 Use `AIModelType.GPT5_5AppServer` when App Server behavior is intended.
 
@@ -93,6 +93,8 @@ The actual Codex model defaults to the app-server configuration; pass
 only when you intentionally want a Codex-supported model override. This enum is
 separate from `AIModelType`; `AIModelType.GPT5_5AppServer` remains the LLMAPI
 compatible route model used for capability checks and provider routing.
+Available typed overrides are `GPT5_5`, `GPT5_6Sol`, `GPT5_6Terra`, and
+`GPT5_6Luna`; `AppServerDefault` keeps the model selected by App Server.
 Multimodal inputs are supported through `Message.parts`; `MessageContent.FromImage(...)`
 and `FromImageUrl(...)` are converted to Codex App Server image input items.
 Function Calling is supported through structured output compatibility: the
@@ -117,19 +119,23 @@ var messages = new List<Message>
     new Message { role = MessageRole.User, content = "Explain what ScriptableObject is used for." }
 };
 
-var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini35Flash);
+var reply = await AIManager.SendMessageAsync(messages, AIModelType.Gemini37Flash);
 Debug.Log(reply);
 ```
 
 Useful chat-oriented models:
 
+- `AIModelType.Gemini37Flash`
 - `AIModelType.Gemini35Flash`
 - `AIModelType.Gemini31`
-- `AIModelType.Gemini31FlashLite`
+- `AIModelType.Gemini35FlashLite`
 - `AIModelType.ClaudeSonnet46`
 - `AIModelType.ClaudeOpus46`
 - `AIModelType.ClaudeSonnet5`
 - `AIModelType.ClaudeOpus48`
+- `AIModelType.ClaudeOpus5`
+- `AIModelType.ClaudeFable5`
+- `AIModelType.ClaudeFable51`
 - `AIModelType.GPT5`
 - `AIModelType.GPT5_4`
 - `AIModelType.GPT5_5`
@@ -142,6 +148,7 @@ Useful chat-oriented models:
 - `AIModelType.Grok4_3`
 - `AIModelType.Grok4_3Reasoning`
 - `AIModelType.Grok4_5`
+- `AIModelType.Grok4_6`
 
 ## Streaming Chat
 
@@ -159,7 +166,7 @@ var messages = new List<Message>
 
 var stream = await AIManager.SendMessageStreamAsync(
     messages,
-    AIModelType.Gemini35Flash,
+    AIModelType.Gemini37Flash,
     onContentDelta: delta => Debug.Log(delta));
 
 Debug.Log(stream?.Content);
@@ -186,7 +193,7 @@ IEnumerator RunEnemyPlan()
 
     var request = AIRequest.SendStructured<EnemyPlan>(
         messages,
-        AIModelType.Gemini35Flash,
+        AIModelType.Gemini37Flash,
         timeoutSeconds: 60);
 
     yield return PlayIntroAnimation();
@@ -261,8 +268,8 @@ Image helpers:
 - `MessageContent.FromImageData(byte[] data, string mime)`
 - `MessageContent.FromImageUrl(string url, string mime = null)`
 
-Vision-capable chat models include `ClaudeSonnet5`, `ClaudeOpus48`, `GPT5_6`,
-`GPT5_5AppServer`, `Gemini35Flash`, and `Gemini31`.
+Vision-capable chat models include `ClaudeSonnet5`, `ClaudeOpus5`, `ClaudeFable51`,
+`GPT5_6`, `GPT5_5AppServer`, `Gemini37Flash`, and `Gemini31`.
 
 ## Structured Output
 
@@ -289,7 +296,7 @@ var messages = new List<Message>
 
 var result = await AIManager.SendStructuredMessageAsync<EnemyConfig>(
     messages,
-    AIModelType.Gemini35Flash);
+    AIModelType.Gemini37Flash);
 
 Debug.Log(result?.name);
 ```
@@ -339,7 +346,7 @@ var messages = new List<Message>
 await AIManager.SendStructuredMessageAsync(
     choice,
     messages,
-    AIModelType.Gemini35Flash);
+    AIModelType.Gemini37Flash);
 
 Debug.Log(choice.selectedAction);
 ```
@@ -373,7 +380,7 @@ var functions = new List<IJsonSchema>
 var result = await AIManager.SendFunctionCallMessageAsync(
     messages,
     functions,
-    AIModelType.Gemini35Flash);
+    AIModelType.Gemini37Flash);
 ```
 
 Example function schema:
@@ -467,7 +474,7 @@ var codexBody = new Dictionary<string, object>
 {
     { "outputPath", "Assets/Generated/coin_icon.png" }
 };
-CodexAppServerModelOptions.ApplyTo(codexBody, CodexAppServerModelType.AppServerDefault);
+CodexAppServerModelOptions.ApplyTo(codexBody, CodexAppServerModelType.GPT5_6Sol);
 
 var codexImages = await AIManager.GenerateImagesAsync(
     prompts,
